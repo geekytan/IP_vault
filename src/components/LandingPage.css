@@ -1,0 +1,210 @@
+/* ========== LANDING PAGE ========== */
+.landing {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  text-align: center;
+}
+
+/* ---- Floating Orbs ---- */
+.landing__orb {
+  position: fixed;
+  border-radius: 50%;
+  filter: blur(80px);
+  pointer-events: none;
+  opacity: 0.5;
+}
+
+.landing__orb--1 {
+  width: 400px;
+  height: 400px;
+  background: rgba(59, 130, 246, 0.15);
+  top: 10%;
+  left: 5%;
+  animation: float 8s ease-in-out infinite;
+}
+
+.landing__orb--2 {
+  width: 350px;
+  height: 350px;
+  background: rgba(139, 92, 246, 0.12);
+  bottom: 10%;
+  right: 5%;
+  animation: float 10s ease-in-out infinite 1s;
+}
+
+.landing__orb--3 {
+  width: 250px;
+  height: 250px;
+  background: rgba(6, 182, 212, 0.1);
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  animation: float 12s ease-in-out infinite 2s;
+}
+
+/* ---- Header ---- */
+.landing__header {
+  animation: fadeInUp 0.8s ease;
+  margin-bottom: 60px;
+}
+
+.landing__icon {
+  font-size: 4rem;
+  margin-bottom: 20px;
+  display: block;
+  animation: float 4s ease-in-out infinite;
+}
+
+.landing__title {
+  font-size: clamp(2.5rem, 6vw, 4rem);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin-bottom: 8px;
+  background: linear-gradient(135deg, #f1f5f9, #3b82f6, #8b5cf6);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: gradient-shift 4s ease infinite;
+}
+
+.landing__subtitle {
+  font-size: clamp(1rem, 2.5vw, 1.25rem);
+  color: var(--text-secondary);
+  font-weight: 400;
+  max-width: 500px;
+  margin: 0 auto;
+  line-height: 1.7;
+}
+
+/* ---- Cards Grid ---- */
+.landing__cards {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 24px;
+  max-width: 720px;
+  width: 100%;
+  animation: fadeInUp 0.8s ease 0.2s both;
+}
+
+@media (max-width: 640px) {
+  .landing__cards {
+    grid-template-columns: 1fr;
+    max-width: 380px;
+  }
+}
+
+/* ---- Workflow Card ---- */
+.landing__card {
+  position: relative;
+  padding: 40px 30px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-xl);
+  cursor: pointer;
+  transition: all var(--transition-slow);
+  overflow: hidden;
+  backdrop-filter: blur(20px);
+}
+
+.landing__card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-xl);
+  padding: 1px;
+  background: linear-gradient(135deg, transparent, transparent);
+  -webkit-mask: 
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask: 
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  transition: background var(--transition-slow);
+  pointer-events: none;
+}
+
+.landing__card:hover::before {
+  background: var(--gradient-primary);
+}
+
+.landing__card:hover {
+  transform: translateY(-6px);
+  box-shadow: var(--shadow-glow);
+  border-color: transparent;
+}
+
+.landing__card:active {
+  transform: translateY(-2px);
+}
+
+.landing__card--creator:hover {
+  box-shadow: 0 0 40px rgba(59, 130, 246, 0.2);
+}
+
+.landing__card--viewer:hover {
+  box-shadow: 0 0 40px rgba(139, 92, 246, 0.2);
+}
+
+.landing__card-icon {
+  font-size: 2.5rem;
+  margin-bottom: 18px;
+  display: block;
+}
+
+.landing__card-title {
+  font-size: 1.35rem;
+  font-weight: 700;
+  margin-bottom: 10px;
+  color: var(--text-primary);
+}
+
+.landing__card-desc {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  margin-bottom: 24px;
+}
+
+.landing__card-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--accent-blue);
+  transition: gap var(--transition-fast);
+}
+
+.landing__card--viewer .landing__card-action {
+  color: var(--accent-violet);
+}
+
+.landing__card:hover .landing__card-action {
+  gap: 12px;
+}
+
+/* ---- Footer ---- */
+.landing__footer {
+  margin-top: 60px;
+  animation: fadeIn 1s ease 0.5s both;
+}
+
+.landing__footer-text {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.landing__footer-text span {
+  background: var(--gradient-primary);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  font-weight: 600;
+}
