@@ -1,74 +1,73 @@
 import { ethers } from "ethers";
 
-export const CONTRACT_ADDRESS = "0x79D213bE1810FcBC5F3a118B0461680FA15cB1Bf";
+// =============================================
+// ⚠️  UPDATE THIS after deploying IPVaultNFT.sol
+// =============================================
+export const CONTRACT_ADDRESS = "0x9Ca928Af256F13586436fc5BC57fB74953594Ed1";
 
 export const CONTRACT_ABI = [
+  // mintIPRecord(string metadataCID) → uint256
+  {
+    inputs: [{ internalType: "string", name: "metadataCID", type: "string" }],
+    name: "mintIPRecord",
+    outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  // getTokensByOwner(address) → uint256[]
+  {
+    inputs: [{ internalType: "address", name: "owner", type: "address" }],
+    name: "getTokensByOwner",
+    outputs: [{ internalType: "uint256[]", name: "", type: "uint256[]" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  // tokenURI(uint256 tokenId) → string
+  {
+    inputs: [{ internalType: "uint256", name: "tokenId", type: "uint256" }],
+    name: "tokenURI",
+    outputs: [{ internalType: "string", name: "", type: "string" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  // ownerOf(uint256 tokenId) → address
+  {
+    inputs: [{ internalType: "uint256", name: "tokenId", type: "uint256" }],
+    name: "ownerOf",
+    outputs: [{ internalType: "address", name: "", type: "address" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  // balanceOf(address) → uint256
+  {
+    inputs: [{ internalType: "address", name: "owner", type: "address" }],
+    name: "balanceOf",
+    outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  // transferFrom(address from, address to, uint256 tokenId)
   {
     inputs: [
-      {
-        internalType: "string",
-        name: "_ipfsHash",
-        type: "string",
-      },
+      { internalType: "address", name: "from", type: "address" },
+      { internalType: "address", name: "to", type: "address" },
+      { internalType: "uint256", name: "tokenId", type: "uint256" },
     ],
-    name: "storeHash",
+    name: "transferFrom",
     outputs: [],
     stateMutability: "nonpayable",
     type: "function",
   },
+  // Event: IPRecordMinted
   {
-    inputs: [],
-    name: "getMyRecords",
-    outputs: [
-      {
-        components: [
-          {
-            internalType: "string",
-            name: "ipfsHash",
-            type: "string",
-          },
-          {
-            internalType: "uint256",
-            name: "timestamp",
-            type: "uint256",
-          },
-        ],
-        internalType: "struct IPVault.Record[]",
-        name: "",
-        type: "tuple[]",
-      },
-    ],
-    stateMutability: "view",
-    type: "function",
-  },
-  {
+    anonymous: false,
     inputs: [
-      {
-        internalType: "address",
-        name: "",
-        type: "address",
-      },
-      {
-        internalType: "uint256",
-        name: "",
-        type: "uint256",
-      },
+      { indexed: true, internalType: "address", name: "owner", type: "address" },
+      { indexed: true, internalType: "uint256", name: "tokenId", type: "uint256" },
+      { indexed: false, internalType: "string", name: "metadataCID", type: "string" },
     ],
-    name: "records",
-    outputs: [
-      {
-        internalType: "string",
-        name: "ipfsHash",
-        type: "string",
-      },
-      {
-        internalType: "uint256",
-        name: "timestamp",
-        type: "uint256",
-      },
-    ],
-    stateMutability: "view",
-    type: "function",
+    name: "IPRecordMinted",
+    type: "event",
   },
 ];
 
@@ -83,15 +82,11 @@ export function getContract(signer) {
  * Returns a read-only contract instance using a reliable public Sepolia provider
  */
 export function getReadOnlyContract() {
-  // Try to use window.ethereum if available (no login required for read calls)
-  // Otherwise fallback to a reliable public RPC
   let provider;
   if (window.ethereum) {
     provider = new ethers.BrowserProvider(window.ethereum);
   } else {
-    // Using a more reliable public endpoint (Ankr)
     provider = new ethers.JsonRpcProvider("https://rpc.ankr.com/eth_sepolia");
   }
-  
   return new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider);
 }

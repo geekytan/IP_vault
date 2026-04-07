@@ -1,82 +1,102 @@
-/* ========== WALLET CONNECT BUTTON ========== */
-.wallet-btn {
+/* =============================================
+   WALLET CONNECT COMPONENT
+   ============================================= */
+
+/* ── Connected State (pill) ── */
+.wc--connected {
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 22px;
+  padding: 8px 14px;
+  background: rgba(16, 185, 129, 0.08);
+  border: 1px solid rgba(16, 185, 129, 0.2);
   border-radius: var(--radius-full);
-  font-size: 0.875rem;
-  font-weight: 600;
+  backdrop-filter: blur(10px);
   transition: all var(--transition-base);
 }
 
-/* Disconnected state */
-.wallet-btn--connect {
-  background: var(--gradient-primary);
-  color: white;
-  box-shadow: 0 4px 15px rgba(59, 130, 246, 0.3);
-}
-
-.wallet-btn--connect:hover {
-  box-shadow: 0 6px 25px rgba(59, 130, 246, 0.5);
-  transform: translateY(-2px);
-}
-
-.wallet-btn--connect:active {
-  transform: translateY(0);
-}
-
-/* Connected state */
-.wallet-btn--connected {
-  background: var(--bg-glass);
-  border: 1px solid var(--border-color);
-  color: var(--text-primary);
-  backdrop-filter: blur(10px);
-}
-
-.wallet-btn--connected:hover {
-  background: var(--bg-glass-hover);
-  border-color: var(--accent-rose);
-}
-
-.wallet-btn__dot {
+.wc__status-dot {
   width: 8px;
   height: 8px;
-  border-radius: 50%;
   background: var(--accent-emerald);
-  animation: pulse-glow 2s ease-in-out infinite;
-  box-shadow: 0 0 8px rgba(16, 185, 129, 0.5);
+  border-radius: 50%;
+  flex-shrink: 0;
+  animation: pulse-emerald 2s ease infinite;
 }
 
-.wallet-btn__address {
-  font-family: 'Inter', monospace;
-  font-size: 0.8rem;
+.wc__address {
+  font-size: 0.82rem;
+  font-weight: 600;
+  font-family: 'Space Grotesk', monospace;
+  color: var(--accent-emerald);
   letter-spacing: 0.02em;
 }
 
-.wallet-btn__disconnect {
-  font-size: 0.75rem;
+.wc__disconnect-btn {
+  background: transparent;
   color: var(--text-muted);
-  margin-left: 4px;
+  border: none;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 2px 4px;
+  border-radius: 4px;
+  transition: all var(--transition-fast);
+  cursor: pointer;
+  line-height: 1;
 }
 
-.wallet-btn--connected:hover .wallet-btn__disconnect {
+.wc__disconnect-btn:hover {
   color: var(--accent-rose);
+  background: rgba(244, 63, 94, 0.1);
 }
 
-/* Loading state */
-.wallet-btn--loading {
-  background: var(--bg-glass);
-  border: 1px solid var(--border-color);
-  color: var(--text-secondary);
-  pointer-events: none;
+/* ── Connect Button ── */
+.wc--connect-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  background: var(--gradient-primary);
+  color: white;
+  border: none;
+  border-radius: var(--radius-full);
+  font-size: 0.875rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all var(--transition-base);
+  box-shadow: 0 4px 15px rgba(59, 130, 246, 0.3);
+  position: relative;
+  overflow: hidden;
 }
 
-.wallet-btn__spinner {
-  width: 16px;
-  height: 16px;
-  border: 2px solid var(--text-muted);
-  border-top-color: var(--accent-blue);
-  border-radius: 50%;
-  animation: spin-slow 0.8s linear infinite;
+.wc--connect-btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(255,255,255,0.15), transparent);
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+
+.wc--connect-btn:hover::before {
+  opacity: 1;
+}
+
+.wc--connect-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 25px rgba(59, 130, 246, 0.5);
+}
+
+.wc--connect-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.wc--loading {
+  animation: pulse-glow 1.5s ease infinite;
+}
+
+.wc__metamask-icon {
+  font-size: 1rem;
 }

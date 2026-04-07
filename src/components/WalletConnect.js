@@ -2,38 +2,42 @@ import React from "react";
 import "./WalletConnect.css";
 
 function WalletConnect({ account, isLoading, onConnect, onDisconnect }) {
-  if (isLoading) {
-    return (
-      <button className="wallet-btn wallet-btn--loading" disabled>
-        <span className="wallet-btn__spinner" />
-        Connecting…
-      </button>
-    );
-  }
+  const truncate = (addr) => `${addr.slice(0, 6)}···${addr.slice(-4)}`;
 
   if (account) {
-    const truncated = `${account.slice(0, 6)}…${account.slice(-4)}`;
     return (
-      <button
-        className="wallet-btn wallet-btn--connected"
-        onClick={onDisconnect}
-        title="Click to disconnect"
-        id="btn-disconnect-wallet"
-      >
-        <span className="wallet-btn__dot" />
-        <span className="wallet-btn__address">{truncated}</span>
-        <span className="wallet-btn__disconnect">✕</span>
-      </button>
+      <div className="wc wc--connected">
+        <div className="wc__status-dot" />
+        <span className="wc__address">{truncate(account)}</span>
+        <button
+          className="wc__disconnect-btn"
+          onClick={onDisconnect}
+          title="Disconnect wallet"
+        >
+          ✕
+        </button>
+      </div>
     );
   }
 
   return (
     <button
-      className="wallet-btn wallet-btn--connect"
+      className={`wc wc--connect-btn ${isLoading ? "wc--loading" : ""}`}
       onClick={onConnect}
+      disabled={isLoading}
       id="btn-connect-wallet"
     >
-      🦊 Connect Wallet
+      {isLoading ? (
+        <>
+          <span className="btn-spinner" />
+          <span>Connecting…</span>
+        </>
+      ) : (
+        <>
+          <span className="wc__metamask-icon">🦊</span>
+          <span>Connect Wallet</span>
+        </>
+      )}
     </button>
   );
 }

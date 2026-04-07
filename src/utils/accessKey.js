@@ -1,25 +1,24 @@
 /**
- * Generates a shareable access key from an owner address and record index.
- * The key is a Base64-encoded JSON string.
+ * Generates a shareable access key from a token ID.
+ * Much simpler than before — a single token ID is all that's needed
+ * to look up the owner and metadata on-chain.
  *
- * @param {string} ownerAddress - The wallet address of the content owner
- * @param {number} recordIndex - The index of the record in the owner's records array
+ * @param {number} tokenId - The NFT token ID
  * @returns {string} Base64-encoded access key
  */
-export function generateAccessKey(ownerAddress, recordIndex) {
+export function generateAccessKey(tokenId) {
   const payload = JSON.stringify({
-    o: ownerAddress,
-    i: recordIndex,
-    v: 1, // version for future compatibility
+    t: tokenId,
+    v: 2, // version 2 = NFT-based
   });
   return btoa(payload);
 }
 
 /**
- * Decodes an access key back into owner address and record index.
+ * Decodes an access key back into a token ID.
  *
  * @param {string} key - Base64-encoded access key
- * @returns {{ owner: string, index: number }} Decoded payload
+ * @returns {{ tokenId: number }} Decoded payload
  * @throws {Error} If the key is invalid
  */
 export function decodeAccessKey(key) {
@@ -28,13 +27,12 @@ export function decodeAccessKey(key) {
     const decoded = atob(cleaned);
     const parsed = JSON.parse(decoded);
 
-    if (!parsed.o || parsed.i === undefined) {
+    if (parsed.t === undefined) {
       throw new Error("Invalid key structure");
     }
 
     return {
-      owner: parsed.o,
-      index: Number(parsed.i),
+      tokenId: Number(parsed.t),
     };
   } catch (err) {
     throw new Error(

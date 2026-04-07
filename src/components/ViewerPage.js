@@ -8,6 +8,7 @@ function ViewerPage({ onBack, onToast }) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState(null);
+  const [unlocked, setUnlocked] = useState(false);
 
   const handleSubmit = async () => {
     if (!accessKey.trim()) {
@@ -18,152 +19,204 @@ function ViewerPage({ onBack, onToast }) {
     setIsLoading(true);
     setError("");
     setResult(null);
+    setUnlocked(false);
 
     try {
-      // Decode the access key
-      const { owner, index } = decodeAccessKey(accessKey.trim());
-
-      // Fetch the record from the blockchain (read-only, no wallet needed)
+      const { tokenId } = decodeAccessKey(accessKey.trim());
       const contract = getReadOnlyContract();
-      const record = await contract.records(owner, index);
 
-      if (!record.ipfsHash || record.ipfsHash === "") {
-        setError("No content found for this access key. It may be invalid or expired.");
+      const [metadataCID, owner] = await Promise.all([
+        contract.tokenURI(tokenId),
+        contract.ownerOf(tokenId),
+      ]);
+
+      if (!metadataCID) {
+        setError("No content found for this access key.");
         return;
       }
 
+      let metadata = null;
+      try {
+        const res = await fetch(`https://ipfs.io/ipfs/${metadataCID}`);
+        metadata = await res.json();
+      } catch (e) {}
+
       setResult({
-        ipfsHash: record.ipfsHash,
-        timestamp: Number(record.timestamp),
-        owner: owner,
+        tokenId,
+        metadataCID,
+        fileCID: metadata?.fileCID || metadataCID,
+        name: metadata?.name || `Token #${tokenId}`,
+        description: metadata?.description || "No description available",
+        owner,
       });
 
+      setUnlocked(true);
       onToast("Content retrieved successfully!", "success");
     } catch (err) {
       console.error(err);
-      setError(
-        err.message || "Failed to retrieve content. Please check your access key."
-      );
+      setError(err.message || "Failed to retrieve content. Please check your access key.");
     } finally {
       setIsLoading(false);
     }
-  };
-
-  const formatTime = (timestamp) => {
-    const date = new Date(timestamp * 1000);
-    return date.toLocaleDateString("en-US", {
-      weekday: "long",
-      month: "long",
-      day: "numeric",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
   };
 
   const truncateAddress = (addr) => `${addr.slice(0, 6)}…${addr.slice(-4)}`;
 
   return (
     <div className="viewer">
+      {/* Ambient bg */}
+      <div className="viewer__orb viewer__orb--1" />
+      <div className="viewer__orb viewer__orb--2" />
+
       {/* Top Bar */}
       <div className="viewer__topbar">
         <button className="back-button" onClick={onBack}>
           <span className="arrow">←</span> Back
         </button>
+        <div className="viewer__topbar-brand">
+          <span>🛡️</span>
+          <span className="viewer__brand-name">IP Vault</span>
+        </div>
       </div>
 
       {/* Hero */}
       <div className="viewer__hero">
-        <span className="viewer__hero-icon">🔑</span>
-        <h1 className="viewer__hero-title">Access Content</h1>
-        <p className="viewer__hero-desc">
-          Enter the access key you received from the content creator to view
-          their protected media.
+        <div className={`viewer__lock-icon ${unlocked ? "viewer__lock-icon--open" : ""}`}>
+          {unlocked ? "🔓" : "🔑"}
+        </div>
+        <h1 className="viewer__title">
+          {unlocked ? "Content Unlocked!" : "Access Protected Content"}
+        </h1>
+        <p className="viewer__desc">
+          {unlocked
+            ? "Your NFT-backed content has been verified on-chain."
+            : "Enter the access key shared by the content creator to view their protected NFT media."}
         </p>
       </div>
 
-      {/* Input */}
-      <div className="viewer__input-group">
-        <div className="viewer__input-wrapper">
-          <input
-            type="text"
-            className="viewer__input"
-            placeholder="Paste your access key here…"
-            value={accessKey}
-            onChange={(e) => {
-              setAccessKey(e.target.value);
-              setError("");
-            }}
-            onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
-            disabled={isLoading}
-            id="input-access-key"
-          />
-          <button
-            className="viewer__submit-btn"
-            onClick={handleSubmit}
-            disabled={isLoading || !accessKey.trim()}
-            id="btn-access-submit"
-          >
-            {isLoading ? (
-              <>
-                <span className="btn-spinner" /> Loading…
-              </>
-            ) : (
-              "Unlock →"
-            )}
-          </button>
-        </div>
+      {/* Input Area */}
+      {!result && (
+        <div className="viewer__input-group">
+          <div className="viewer__input-card">
+            <label className="viewer__input-label" htmlFor="input-access-key">
+              Access Key
+            </label>
+            <div className="viewer__input-row">
+              <div className="viewer__input-wrapper">
+                <span className="viewer__input-prefix">🔑</span>
+                <input
+                  type="text"
+                  className="viewer__input"
+                  placeholder="Paste your access key here…"
+                  value={accessKey}
+                  onChange={(e) => {
+                    setAccessKey(e.target.value);
+                    setError("");
+                  }}
+                  onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
+                  disabled={isLoading}
+                  id="input-access-key"
+                />
+              </div>
+              <button
+                className="viewer__submit-btn"
+                onClick={handleSubmit}
+                disabled={isLoading || !accessKey.trim()}
+                id="btn-access-submit"
+              >
+                {isLoading ? (
+                  <>
+                    <span className="btn-spinner" />
+                    <span>Verifying…</span>
+                  </>
+                ) : (
+                  <>Unlock <span className="viewer__btn-arrow">→</span></>
+                )}
+              </button>
+            </div>
 
-        {error && (
-          <div className="viewer__error">
-            ⚠️ {error}
+            {error && (
+              <div className="viewer__error">
+                <span>⚠️</span>
+                <span>{error}</span>
+              </div>
+            )}
+
+            <p className="viewer__hint">
+              Access keys are provided by NFT owners. No wallet required to view content.
+            </p>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Result */}
       {result && (
         <div className="viewer__result">
           <div className="viewer__result-card">
-            <div className="viewer__result-badge">
-              <span className="viewer__result-badge-dot" />
-              Verified on Blockchain
+            {/* Verified badge */}
+            <div className="viewer__verified-badge">
+              <span className="viewer__verified-dot" />
+              <span>Verified NFT · Token #{result.tokenId}</span>
             </div>
 
-            <div className="viewer__result-section">
-              <div className="viewer__result-label">IPFS Content Hash</div>
+            {/* Info sections */}
+            <div className="viewer__result-grid">
+              <div className="viewer__result-field">
+                <div className="viewer__result-label">Title</div>
+                <div className="viewer__result-value viewer__result-value--large">{result.name}</div>
+              </div>
+
+              <div className="viewer__result-field">
+                <div className="viewer__result-label">Description</div>
+                <div className="viewer__result-value">{result.description}</div>
+              </div>
+
+              <div className="viewer__result-field">
+                <div className="viewer__result-label">IPFS Content Hash</div>
+                <a
+                  className="viewer__result-cid"
+                  href={`https://ipfs.io/ipfs/${result.fileCID}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  {result.fileCID}
+                </a>
+              </div>
+
+              <div className="viewer__result-row">
+                <div className="viewer__result-field viewer__result-field--half">
+                  <div className="viewer__result-label">Current Owner</div>
+                  <div className="viewer__result-owner">{truncateAddress(result.owner)}</div>
+                </div>
+                <div className="viewer__result-field viewer__result-field--half">
+                  <div className="viewer__result-label">Token Standard</div>
+                  <div className="viewer__result-standard">ERC-721</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Action buttons */}
+            <div className="viewer__result-actions">
               <a
-                className="viewer__result-cid"
-                href={`https://ipfs.io/ipfs/${result.ipfsHash}`}
+                className="lp-btn lp-btn--primary"
+                href={`https://ipfs.io/ipfs/${result.fileCID}`}
                 target="_blank"
                 rel="noopener noreferrer"
+                id="btn-view-content"
               >
-                {result.ipfsHash}
+                🌐 View Content on IPFS
               </a>
+              <button
+                className="viewer__reset-btn"
+                onClick={() => {
+                  setResult(null);
+                  setAccessKey("");
+                  setUnlocked(false);
+                }}
+              >
+                Enter Another Key
+              </button>
             </div>
-
-            <div className="viewer__result-section">
-              <div className="viewer__result-label">Registered On</div>
-              <div className="viewer__result-time">
-                {formatTime(result.timestamp)}
-              </div>
-            </div>
-
-            <div className="viewer__result-section">
-              <div className="viewer__result-label">Content Owner</div>
-              <div className="viewer__result-owner">
-                {truncateAddress(result.owner)}
-              </div>
-            </div>
-
-            <a
-              className="viewer__content-link"
-              href={`https://ipfs.io/ipfs/${result.ipfsHash}`}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              🌐 View Content on IPFS
-            </a>
           </div>
         </div>
       )}
