@@ -16,6 +16,9 @@ function CertificateModal({ token, ownerAddress, onClose }) {
   const isEncrypted = metadata.isEncrypted || false;
   const createdAt = metadata.createdAt || new Date().toISOString();
   const owner = ownerAddress || token?.owner || "0x0000000000000000000000000000000000000000";
+  const categoryName = metadata.categoryName || "General Intellectual Property";
+  const licensingName = metadata.licensing?.licenseName || "All Rights Reserved (Proprietary)";
+  const royaltyShare = metadata.licensing?.royaltyPercent;
 
   // Certificate ID
   const certId = `IPV-CERT-${new Date(createdAt).getFullYear()}-${String(tokenId).padStart(5, "0")}`;
@@ -179,6 +182,20 @@ function CertificateModal({ token, ownerAddress, onClose }) {
                 <span className="cert-label">Confidentiality Status</span>
                 <span className="cert-value">
                   {isEncrypted ? "🔒 Zero-Knowledge Encrypted (AES-256-GCM)" : "🌐 Public Prior Art Publication"}
+                </span>
+              </div>
+
+              <div className="cert-field cert-field--half">
+                <span className="cert-label">Legal IP Category</span>
+                <span className="cert-value">
+                  {categoryName}
+                </span>
+              </div>
+
+              <div className="cert-field cert-field--half">
+                <span className="cert-label">Commercial Licensing Terms</span>
+                <span className="cert-value">
+                  {licensingName} {royaltyShare > 0 ? `(${royaltyShare}% Royalty)` : ""}
                 </span>
               </div>
 

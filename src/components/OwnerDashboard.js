@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { ethers } from "ethers";
 import WalletConnect from "./WalletConnect";
-import { getContract } from "../utils/contract";
+import { getContract, IP_CATEGORIES, LICENSE_TYPES } from "../utils/contract";
 import { generateAccessKey, saveLocalAssetKey, getLocalAssetKey } from "../utils/accessKey";
 import { computeSHA256, encryptFile } from "../utils/crypto";
 import { fetchIPFSJSON, fetchIPFSBlob, pinFileToPinata, pinJSONToPinata } from "../utils/ipfs";
@@ -23,6 +23,9 @@ function OwnerDashboard({ onBack, onToast, onSelectVerifier }) {
   const [stagedEncryptionKeys, setStagedEncryptionKeys] = useState(null);
   const [copiedIndex, setCopiedIndex] = useState(null);
   const [selectedCertToken, setSelectedCertToken] = useState(null);
+  const [category, setCategory] = useState(1); // 1 = PatentPriorArt
+  const [licenseType, setLicenseType] = useState(0); // 0 = AllRightsReserved
+  const [royaltyPercent, setRoyaltyPercent] = useState("5.0");
   const [showArchived, setShowArchived] = useState(false);
   const [archivedIds, setArchivedIds] = useState(() => {
     const saved = localStorage.getItem("archived_tokens");
@@ -249,11 +252,21 @@ function OwnerDashboard({ onBack, onToast, onSelectVerifier }) {
 
     setIsMinting(true);
     try {
+      const selectedCategoryObj = IP_CATEGORIES.find((c) => c.id === Number(category));
+      const selectedLicenseObj = LICENSE_TYPES.find((l) => l.id === Number(licenseType));
+
       const metadata = {
         name: selectedFile ? selectedFile.name : "Manual Entry",
         description: description || "No description provided",
         fileCID: cid,
         sha256: fileHash || null,
+        category: Number(category),
+        categoryName: selectedCategoryObj?.label || "General Intellectual Property",
+        licensing: {
+          licenseType: Number(licenseType),
+          licenseName: selectedLicenseObj?.label || "All Rights Reserved",
+          royaltyPercent: Number(licenseType) === 2 ? Number(royaltyPercent || 0) : 0,
+        },
         isEncrypted: isEncryptedMode,
         encryptionAlgorithm: isEncryptedMode ? "AES-GCM-256" : "None",
         fileSize: selectedFile ? selectedFile.size : null,
@@ -266,7 +279,33 @@ function OwnerDashboard({ onBack, onToast, onSelectVerifier }) {
       const finalHash = await pinJSONToPinata(metadata);
 
       onToast("Minting NFT on blockchain…", "info");
-      const tx = await contract.mintIPRecord(finalHash);
+
+      // Check if contract has v2 registerIPRecord function
+      let tx;
+      if (typeof contract.registerIPRecord === "function" && fileHash) {
+        try {
+          const hashBytes32 = fileHash.startsWith("0x") ? fileHash : `0x${fileHash}`;
+          const licensingTuple = [
+            Number(licenseType),
+            Math.round(Number(royaltyPercent || 0) * 100), // basis points
+            Number(licenseType) === 2 || Number(licenseType) === 3,
+            "",
+          ];
+          tx = await contract.registerIPRecord(
+            hashBytes32,
+            finalHash,
+            Number(category),
+            licensingTuple,
+            isEncryptedMode
+          );
+        } catch (v2Err) {
+          console.warn("registerIPRecord reverted, falling back to mintIPRecord:", v2Err);
+          tx = await contract.mintIPRecord(finalHash);
+        }
+      } else {
+        tx = await contract.mintIPRecord(finalHash);
+      }
+
       const receipt = await tx.wait();
 
       // Extract minted token ID from transaction logs
@@ -643,6 +682,68 @@ function OwnerDashboard({ onBack, onToast, onSelectVerifier }) {
             />
           </div>
 
+          {/* Legal IP Category & Commercial Licensing Selectors (Story Protocol & Bernstein Model) */}
+          <div className="dashboard__protocol-selectors">
+            <div className="dashboard__select-group">
+              <label className="dashboard__select-label">
+                <span>📁</span> Legal IP Category
+              </label>
+              <select
+                className="dashboard__select"
+                value={category}
+                onChange={(e) => setCategory(Number(e.target.value))}
+                disabled={isMinting || isUploading}
+                id="select-ip-category"
+              >
+                {IP_CATEGORIES.map((cat) => (
+                  <option key={cat.id} value={cat.id}>
+                    {cat.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="dashboard__select-group">
+              <label className="dashboard__select-label">
+                <span>⚖️</span> Commercial Licensing Terms
+              </label>
+              <select
+                className="dashboard__select"
+                value={licenseType}
+                onChange={(e) => setLicenseType(Number(e.target.value))}
+                disabled={isMinting || isUploading}
+                id="select-license-type"
+              >
+                {LICENSE_TYPES.map((lic) => (
+                  <option key={lic.id} value={lic.id}>
+                    {lic.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {Number(licenseType) === 2 && (
+            <div className="dashboard__royalty-row">
+              <label className="dashboard__select-label">
+                <span>💰</span> Royalty Share (%):
+              </label>
+              <input
+                type="number"
+                min="0"
+                max="50"
+                step="0.5"
+                className="dashboard__input"
+                style={{ width: 100, display: "inline-block" }}
+                value={royaltyPercent}
+                onChange={(e) => setRoyaltyPercent(e.target.value)}
+                placeholder="5.0"
+                disabled={isMinting || isUploading}
+              />
+              <span className="dashboard__royalty-hint">% royalty payable on commercial exploitation</span>
+            </div>
+          )}
+
           <div className="dashboard__mint-row">
             <button
               className="dashboard__store-btn dashboard__store-btn--mint"
@@ -730,8 +831,22 @@ function OwnerDashboard({ onBack, onToast, onSelectVerifier }) {
                                 🌐 Public
                               </span>
                             )}
+                            {token.metadata?.categoryName && (
+                              <span className="badge badge--category" title="Legal IP Category">
+                                {token.metadata.categoryName}
+                              </span>
+                            )}
                           </div>
                           <div className="record-card__description">{desc}</div>
+
+                          {token.metadata?.licensing?.licenseName && (
+                            <div className="record-card__license-tag">
+                              <span>⚖️ {token.metadata.licensing.licenseName}</span>
+                              {token.metadata.licensing.royaltyPercent > 0 && (
+                                <span className="royalty-subtag"> · {token.metadata.licensing.royaltyPercent}% Royalty</span>
+                              )}
+                            </div>
+                          )}
 
                           {sha256 && (
                             <div className="record-card__hash-row">

@@ -369,6 +369,26 @@ function VerifierPage({ onBack, onToast, onSelectCreator }) {
                   </span>
                 </div>
 
+                {verificationResult.token.metadata?.categoryName && (
+                  <div className="v-card__field v-card__field--half">
+                    <span className="v-card__label">Legal IP Category</span>
+                    <span className="v-card__value">
+                      {verificationResult.token.metadata.categoryName}
+                    </span>
+                  </div>
+                )}
+
+                {verificationResult.token.metadata?.licensing?.licenseName && (
+                  <div className="v-card__field v-card__field--half">
+                    <span className="v-card__label">Commercial Licensing Terms</span>
+                    <span className="v-card__value">
+                      {verificationResult.token.metadata.licensing.licenseName}
+                      {verificationResult.token.metadata.licensing.royaltyPercent > 0 &&
+                        ` (${verificationResult.token.metadata.licensing.royaltyPercent}% Royalty)`}
+                    </span>
+                  </div>
+                )}
+
                 <div className="v-card__field v-card__field--full">
                   <span className="v-card__label">Matched SHA-256 Fingerprint</span>
                   <code className="v-card__hash">
