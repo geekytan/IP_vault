@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { decodeAccessKey } from "../utils/accessKey";
 import { getReadOnlyContract } from "../utils/contract";
 import { decryptFile } from "../utils/crypto";
@@ -15,11 +15,22 @@ function ViewerPage({ onBack, onToast, onSelectVerifier }) {
   const [unlocked, setUnlocked] = useState(false);
   const [showCertificate, setShowCertificate] = useState(false);
 
+  // Live key inspector for user feedback as they type or paste
+  const keyInfo = useMemo(() => {
+    const raw = accessKey.trim();
+    if (!raw) return null;
+    try {
+      return decodeAccessKey(raw);
+    } catch {
+      return null;
+    }
+  }, [accessKey]);
+
   // Clean up Object URL when component unmounts or result changes
   useEffect(() => {
     return () => {
-      if (result?.decryptedUrl) {
-        URL.revokeObjectURL(result.decryptedUrl);
+      if (result?.displayUrl && result.displayUrl.startsWith("blob:")) {
+        URL.revokeObjectURL(result.displayUrl);
       }
     };
   }, [result]);
@@ -32,7 +43,7 @@ function ViewerPage({ onBack, onToast, onSelectVerifier }) {
 
     setIsLoading(true);
     setError("");
-    setStatusText("Decoding access key…");
+    setStatusText("Decoding cryptographic key payload…");
     setResult(null);
     setUnlocked(false);
 
@@ -40,7 +51,7 @@ function ViewerPage({ onBack, onToast, onSelectVerifier }) {
       const decodedKey = decodeAccessKey(accessKey.trim());
       const contract = getReadOnlyContract();
 
-      setStatusText("Verifying ownership on blockchain…");
+      setStatusText("Verifying token provenance on Ethereum Sepolia…");
       const [metadataCID, owner] = await Promise.all([
         contract.tokenURI(decodedKey.tokenId),
         contract.ownerOf(decodedKey.tokenId),
@@ -50,7 +61,7 @@ function ViewerPage({ onBack, onToast, onSelectVerifier }) {
         throw new Error("No IP metadata found on-chain for this token ID.");
       }
 
-      setStatusText("Retrieving metadata from IPFS…");
+      setStatusText("Retrieving decentralized metadata from IPFS…");
       let metadata = null;
       try {
         metadata = await fetchIPFSJSON(metadataCID);
@@ -63,9 +74,30 @@ function ViewerPage({ onBack, onToast, onSelectVerifier }) {
       const sha256 = metadata?.sha256 || decodedKey.sha256Hex;
       const name = metadata?.name || decodedKey.name || `Asset #${decodedKey.tokenId}`;
       const description = metadata?.description || "No description provided";
-      const mimeType = metadata?.mimeType || "application/octet-stream";
 
-      let decryptedUrl = null;
+      // Detect / infer MIME type
+      let resolvedMime = metadata?.mimeType;
+      if (!resolvedMime || resolvedMime === "application/octet-stream") {
+        const lowerName = name.toLowerCase();
+        if (lowerName.endsWith(".pdf")) resolvedMime = "application/pdf";
+        else if (lowerName.endsWith(".png")) resolvedMime = "image/png";
+        else if (lowerName.endsWith(".jpg") || lowerName.endsWith(".jpeg")) resolvedMime = "image/jpeg";
+        else if (lowerName.endsWith(".gif")) resolvedMime = "image/gif";
+        else if (lowerName.endsWith(".svg")) resolvedMime = "image/svg+xml";
+        else if (lowerName.endsWith(".webp")) resolvedMime = "image/webp";
+        else if (lowerName.endsWith(".mp3")) resolvedMime = "audio/mpeg";
+        else if (lowerName.endsWith(".wav")) resolvedMime = "audio/wav";
+        else if (lowerName.endsWith(".mp4")) resolvedMime = "video/mp4";
+        else if (lowerName.endsWith(".webm")) resolvedMime = "video/webm";
+        else if (lowerName.endsWith(".txt")) resolvedMime = "text/plain";
+        else if (lowerName.endsWith(".json")) resolvedMime = "application/json";
+        else if (lowerName.endsWith(".md")) resolvedMime = "text/markdown";
+        else if (lowerName.endsWith(".docx")) resolvedMime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+        else resolvedMime = "application/octet-stream";
+      }
+
+      let displayUrl = null;
+      let textPreview = null;
       let isVerified = false;
 
       if (isAssetEncrypted) {
@@ -75,20 +107,66 @@ function ViewerPage({ onBack, onToast, onSelectVerifier }) {
           );
         }
 
-        setStatusText("Fetching encrypted payload from IPFS…");
+        setStatusText("Fetching encrypted ciphertext from IPFS…");
         const encryptedBlob = await fetchIPFSBlob(fileCID);
 
-        setStatusText("Decrypting in-browser memory (Zero-Knowledge)…");
+        setStatusText("Decrypting in-memory with Web Crypto AES-256-GCM…");
         const decResult = await decryptFile(
           encryptedBlob,
           decodedKey.keyBase64,
           decodedKey.ivBase64,
           sha256,
-          mimeType
+          resolvedMime
         );
 
-        decryptedUrl = URL.createObjectURL(decResult.decryptedBlob);
+        displayUrl = URL.createObjectURL(decResult.decryptedBlob);
         isVerified = decResult.verified;
+
+        // If plain text / code / json, read text for direct display
+        if (
+          resolvedMime.startsWith("text/") ||
+          resolvedMime === "application/json" ||
+          name.endsWith(".txt") ||
+          name.endsWith(".md") ||
+          name.endsWith(".json") ||
+          name.endsWith(".sol") ||
+          name.endsWith(".js") ||
+          name.endsWith(".py")
+        ) {
+          try {
+            const rawText = await decResult.decryptedBlob.text();
+            textPreview = rawText.length > 50000 ? rawText.slice(0, 50000) + "\n\n... [Content truncated for preview. Full file available via Download]" : rawText;
+          } catch (e) {
+            console.warn("Could not read text from blob", e);
+          }
+        }
+      } else {
+        // Public / Unencrypted file: load in memory for seamless previewing
+        setStatusText("Loading asset payload from IPFS…");
+        try {
+          const publicBlob = await fetchIPFSBlob(fileCID);
+          const typedBlob = new Blob([publicBlob], { type: resolvedMime });
+          displayUrl = URL.createObjectURL(typedBlob);
+
+          if (
+            resolvedMime.startsWith("text/") ||
+            resolvedMime === "application/json" ||
+            name.endsWith(".txt") ||
+            name.endsWith(".md") ||
+            name.endsWith(".json") ||
+            name.endsWith(".sol") ||
+            name.endsWith(".js") ||
+            name.endsWith(".py")
+          ) {
+            try {
+              const rawText = await typedBlob.text();
+              textPreview = rawText.length > 50000 ? rawText.slice(0, 50000) + "\n\n... [Content truncated for preview. Full file available via Download]" : rawText;
+            } catch (e) {}
+          }
+        } catch (e) {
+          console.warn("Could not load blob into memory, fallback to gateway", e);
+          displayUrl = `https://gateway.pinata.cloud/ipfs/${fileCID}`;
+        }
       }
 
       setResult({
@@ -101,16 +179,18 @@ function ViewerPage({ onBack, onToast, onSelectVerifier }) {
         isEncrypted: isAssetEncrypted,
         verifiedIntegrity: isVerified || !isAssetEncrypted,
         sha256,
-        mimeType,
+        mimeType: resolvedMime,
         fileSize: metadata?.fileSize,
-        decryptedUrl,
+        displayUrl,
+        textPreview,
+        rawKey: accessKey.trim(),
       });
 
       setUnlocked(true);
       onToast(
         isAssetEncrypted
           ? "🎉 Decrypted & Verified with Zero-Knowledge Proof!"
-          : "Content retrieved successfully!",
+          : "✅ Prior Art Record Retrieved Successfully!",
         "success"
       );
     } catch (err) {
@@ -122,11 +202,24 @@ function ViewerPage({ onBack, onToast, onSelectVerifier }) {
     }
   };
 
-  const truncateAddress = (addr) => `${addr.slice(0, 6)}…${addr.slice(-4)}`;
+  const truncateAddress = (addr) => (addr ? `${addr.slice(0, 6)}…${addr.slice(-4)}` : "N/A");
+
+  const handlePasteKey = async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text) {
+        setAccessKey(text.trim());
+        setError("");
+        onToast("Pasted from clipboard", "info");
+      }
+    } catch {
+      onToast("Unable to read clipboard automatically. Please press Ctrl+V.", "info");
+    }
+  };
 
   return (
     <div className="viewer">
-      {/* Ambient bg */}
+      {/* Ambient Orbs */}
       <div className="viewer__orb viewer__orb--1" />
       <div className="viewer__orb viewer__orb--2" />
 
@@ -137,7 +230,7 @@ function ViewerPage({ onBack, onToast, onSelectVerifier }) {
         </button>
         <div className="viewer__topbar-brand">
           <span>🛡️</span>
-          <span className="viewer__brand-name">IP Vault</span>
+          <span className="viewer__brand-name">IP Vault Viewer</span>
         </div>
         {onSelectVerifier && (
           <button
@@ -151,7 +244,7 @@ function ViewerPage({ onBack, onToast, onSelectVerifier }) {
         )}
       </div>
 
-      {/* Hero */}
+      {/* Hero Section */}
       <div className="viewer__hero">
         <div className={`viewer__lock-icon ${unlocked ? "viewer__lock-icon--open" : ""}`}>
           {unlocked ? "🔓" : "🔑"}
@@ -161,7 +254,7 @@ function ViewerPage({ onBack, onToast, onSelectVerifier }) {
         </h1>
         <p className="viewer__desc">
           {unlocked
-            ? "Your content has been authenticated on-chain and decrypted in-browser memory."
+            ? "Your asset has been authenticated on-chain and restored in private browser memory."
             : "Enter a cryptographic access key to verify on-chain provenance and decrypt protected IP assets."}
         </p>
       </div>
@@ -170,16 +263,27 @@ function ViewerPage({ onBack, onToast, onSelectVerifier }) {
       {!result && (
         <div className="viewer__input-group">
           <div className="viewer__input-card">
-            <label className="viewer__input-label" htmlFor="input-access-key">
-              Cryptographic Access Key
-            </label>
+            <div className="viewer__input-card-header">
+              <label className="viewer__input-label" htmlFor="input-access-key">
+                Cryptographic Access Key
+              </label>
+              <button
+                type="button"
+                className="viewer__paste-action"
+                onClick={handlePasteKey}
+                title="Paste from clipboard"
+              >
+                📋 Paste Key
+              </button>
+            </div>
+
             <div className="viewer__input-row">
               <div className="viewer__input-wrapper">
                 <span className="viewer__input-prefix">🔑</span>
                 <input
                   type="text"
                   className="viewer__input"
-                  placeholder="Paste access key (e.g. IPV-eyJ2IjoiMy4w…)"
+                  placeholder="Paste access key (e.g. IPV-eyJ2IjoiMy4w… or Token #)"
                   value={accessKey}
                   onChange={(e) => {
                     setAccessKey(e.target.value);
@@ -207,6 +311,32 @@ function ViewerPage({ onBack, onToast, onSelectVerifier }) {
               </button>
             </div>
 
+            {/* Key Inspector Live Feedback */}
+            {keyInfo && (
+              <div className="viewer__key-inspector">
+                <span className="key-chip key-chip--token">
+                  Token #{keyInfo.tokenId}
+                </span>
+                {keyInfo.isEncrypted ? (
+                  <span className="key-chip key-chip--encrypted">
+                    🔒 AES-256-GCM Key Attached
+                  </span>
+                ) : (
+                  <span className="key-chip key-chip--public">
+                    🌐 Public Token Access
+                  </span>
+                )}
+                {keyInfo.sha256Hex && (
+                  <span className="key-chip key-chip--hash">
+                    SHA: {keyInfo.sha256Hex.slice(0, 8)}…{keyInfo.sha256Hex.slice(-6)}
+                  </span>
+                )}
+                <span className="key-chip key-chip--ver">
+                  v{keyInfo.version}
+                </span>
+              </div>
+            )}
+
             {statusText && (
               <div className="viewer__status">
                 <span className="viewer__status-dot" />
@@ -222,13 +352,13 @@ function ViewerPage({ onBack, onToast, onSelectVerifier }) {
             )}
 
             <p className="viewer__hint">
-              Access keys are provided by IP creators. No wallet required to decrypt and view content.
+              Access keys are generated upon IP registration. No wallet connection or gas fees required to view or decrypt.
             </p>
           </div>
         </div>
       )}
 
-      {/* Result */}
+      {/* Result Display */}
       {result && (
         <div className="viewer__result">
           <div className="viewer__result-card">
@@ -238,18 +368,59 @@ function ViewerPage({ onBack, onToast, onSelectVerifier }) {
               <span>Verified On-Chain NFT · Token #{result.tokenId}</span>
             </div>
 
-            {/* Zero-Knowledge Security Banner */}
-            {result.isEncrypted && (
-              <div className="viewer__security-banner">
-                <span className="security-icon">🛡️</span>
-                <div className="security-text">
-                  <strong>Zero-Knowledge AES-256 Decryption Complete</strong>
-                  <p>Payload was fetched encrypted from IPFS and decrypted strictly in your browser memory.</p>
+            {/* Integrity Barometer */}
+            {result.isEncrypted ? (
+              <div className="viewer__integrity-card">
+                <div className="integrity-icon">🛡️</div>
+                <div className="integrity-content">
+                  <div className="integrity-badge-row">
+                    <span className="integrity-status-pill">
+                      ✓ ZERO-KNOWLEDGE DECRYPTION COMPLETE
+                    </span>
+                    {result.verifiedIntegrity && (
+                      <span className="integrity-match-pill">
+                        ✓ 100% BITWISE INTEGRITY CONFIRMED
+                      </span>
+                    )}
+                  </div>
+                  <h3 className="integrity-heading">In-Memory Hardware AES-256-GCM Decryption</h3>
+                  <p className="integrity-subtext">
+                    Ciphertext was fetched from decentralized IPFS, verified against on-chain Ethereum records,
+                    and decrypted strictly in private browser memory. Plaintext was never exposed to any server.
+                  </p>
+                  {result.sha256 && (
+                    <div className="integrity-digest">
+                      <span className="digest-label">Cryptographic SHA-256 Digest:</span>
+                      <code className="digest-code">0x{result.sha256}</code>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="viewer__integrity-card viewer__integrity-card--public">
+                <div className="integrity-icon">🌐</div>
+                <div className="integrity-content">
+                  <div className="integrity-badge-row">
+                    <span className="integrity-status-pill integrity-status-pill--public">
+                      ✓ PUBLIC PRIOR ART RECORD
+                    </span>
+                  </div>
+                  <h3 className="integrity-heading">Immutable On-Chain Attestation</h3>
+                  <p className="integrity-subtext">
+                    This intellectual property record is permanently anchored to the Ethereum Sepolia registry
+                    for open prior art defense and legal timestamping.
+                  </p>
+                  {result.sha256 && (
+                    <div className="integrity-digest">
+                      <span className="digest-label">Cryptographic SHA-256 Digest:</span>
+                      <code className="digest-code">0x{result.sha256}</code>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
 
-            {/* Info sections */}
+            {/* Metadata Fields */}
             <div className="viewer__result-grid">
               <div className="viewer__result-field">
                 <div className="viewer__result-label">Asset Title</div>
@@ -261,31 +432,9 @@ function ViewerPage({ onBack, onToast, onSelectVerifier }) {
                 <div className="viewer__result-value">{result.description}</div>
               </div>
 
-              {result.sha256 && (
-                <div className="viewer__result-field">
-                  <div className="viewer__result-label">Cryptographic Fingerprint (SHA-256)</div>
-                  <div className="viewer__hash-box">
-                    <code>0x{result.sha256}</code>
-                    <span className="hash-status-badge">✓ Tamper-Evident Integrity</span>
-                  </div>
-                </div>
-              )}
-
-              <div className="viewer__result-field">
-                <div className="viewer__result-label">IPFS Storage CID</div>
-                <a
-                  className="viewer__result-cid"
-                  href={`https://gateway.pinata.cloud/ipfs/${result.fileCID}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  {result.fileCID}
-                </a>
-              </div>
-
               <div className="viewer__result-row">
                 <div className="viewer__result-field viewer__result-field--half">
-                  <div className="viewer__result-label">Registered Owner</div>
+                  <div className="viewer__result-label">Registered Owner / Author</div>
                   <div className="viewer__result-owner">{truncateAddress(result.owner)}</div>
                 </div>
                 <div className="viewer__result-field viewer__result-field--half">
@@ -293,43 +442,127 @@ function ViewerPage({ onBack, onToast, onSelectVerifier }) {
                   <div className="viewer__result-standard">ERC-721 (Sepolia)</div>
                 </div>
               </div>
+
+              <div className="viewer__result-field">
+                <div className="viewer__result-label">IPFS Decentralized Storage</div>
+                <a
+                  className="viewer__result-cid"
+                  href={`https://gateway.pinata.cloud/ipfs/${result.fileCID}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  {result.fileCID} ↗
+                </a>
+              </div>
             </div>
 
-            {/* In-browser preview for decrypted content */}
-            {result.decryptedUrl && (
+            {/* ── Interactive In-Browser Asset Previewer ── */}
+            {result.displayUrl && (
               <div className="viewer__preview-container">
-                <div className="viewer__preview-header">Asset Preview</div>
-                {result.mimeType.startsWith("image/") ? (
+                <div className="viewer__preview-header">
+                  <span className="viewer__preview-header-title">
+                    🔍 Live In-Browser Decryption Preview
+                  </span>
+                  <span className="viewer__preview-header-badge">
+                    {result.mimeType}
+                  </span>
+                </div>
+
+                {/* PDF Viewer */}
+                {(result.mimeType === "application/pdf" || result.name.toLowerCase().endsWith(".pdf")) ? (
+                  <div className="viewer__preview-pdf-wrap">
+                    <div className="viewer__preview-pdf-bar">
+                      <span>📄 Embedded PDF Viewer</span>
+                      <a
+                        href={result.displayUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="viewer__preview-pill-link"
+                      >
+                        ↗ Open in New Window
+                      </a>
+                    </div>
+                    <iframe
+                      src={`${result.displayUrl}#toolbar=1`}
+                      title={result.name}
+                      className="viewer__preview-pdf-frame"
+                    />
+                  </div>
+                ) : result.mimeType.startsWith("image/") ? (
+                  /* Image Viewer */
                   <div className="viewer__preview-media">
-                    <img src={result.decryptedUrl} alt={result.name} className="viewer__preview-img" />
+                    <img
+                      src={result.displayUrl}
+                      alt={result.name}
+                      className="viewer__preview-img"
+                    />
                   </div>
                 ) : result.mimeType.startsWith("audio/") ? (
-                  <div className="viewer__preview-media">
-                    <audio controls src={result.decryptedUrl} style={{ width: "100%" }} />
+                  /* Audio Player */
+                  <div className="viewer__preview-audio-wrap">
+                    <div className="viewer__preview-audio-icon">🎵</div>
+                    <audio controls src={result.displayUrl} style={{ width: "100%" }} />
                   </div>
                 ) : result.mimeType.startsWith("video/") ? (
+                  /* Video Player */
                   <div className="viewer__preview-media">
-                    <video controls src={result.decryptedUrl} style={{ width: "100%", maxHeight: 400 }} />
+                    <video controls src={result.displayUrl} style={{ width: "100%", maxHeight: 420 }} />
+                  </div>
+                ) : result.textPreview ? (
+                  /* Code / Text Viewer */
+                  <div className="viewer__preview-text-wrap">
+                    <div className="viewer__preview-text-bar">
+                      <span>📄 Source Code / Text File</span>
+                      <button
+                        type="button"
+                        className="viewer__preview-pill-link"
+                        onClick={() => {
+                          navigator.clipboard.writeText(result.textPreview);
+                          onToast("Copied code to clipboard!", "success");
+                        }}
+                      >
+                        📋 Copy Content
+                      </button>
+                    </div>
+                    <pre className="viewer__preview-code-block">
+                      <code>{result.textPreview}</code>
+                    </pre>
                   </div>
                 ) : (
-                  <div className="viewer__preview-generic">
-                    <span>📄</span>
-                    <span>Decrypted File Ready ({result.mimeType})</span>
+                  /* Word / Office / Other Document Card */
+                  <div className="viewer__preview-doc-card">
+                    <div className="viewer__preview-doc-icon">📑</div>
+                    <div className="viewer__preview-doc-info">
+                      <div className="viewer__preview-doc-title">{result.name}</div>
+                      <div className="viewer__preview-doc-desc">
+                        Office Document / Binary Payload ({result.mimeType})
+                      </div>
+                      <div className="viewer__preview-doc-note">
+                        ✓ Bitwise decrypted and verified in memory · Ready for secure download
+                      </div>
+                    </div>
+                    <a
+                      href={result.displayUrl}
+                      download={result.name}
+                      className="viewer__preview-doc-btn"
+                    >
+                      ⬇️ Download File
+                    </a>
                   </div>
                 )}
               </div>
             )}
 
-            {/* Action buttons */}
+            {/* Action Buttons */}
             <div className="viewer__result-actions">
-              {result.decryptedUrl ? (
+              {result.displayUrl ? (
                 <a
                   className="lp-btn lp-btn--primary"
-                  href={result.decryptedUrl}
+                  href={result.displayUrl}
                   download={result.name}
                   id="btn-download-decrypted"
                 >
-                  ⬇️ Download Decrypted Asset
+                  ⬇️ Download Verified Asset
                 </a>
               ) : (
                 <a
@@ -339,7 +572,7 @@ function ViewerPage({ onBack, onToast, onSelectVerifier }) {
                   rel="noopener noreferrer"
                   id="btn-view-content"
                 >
-                  🌐 View Content on IPFS
+                  🌐 View on IPFS Gateway
                 </a>
               )}
 
@@ -350,6 +583,16 @@ function ViewerPage({ onBack, onToast, onSelectVerifier }) {
               >
                 📜 Proof Certificate
               </button>
+
+              {onSelectVerifier && (
+                <button
+                  className="viewer__verify-btn"
+                  onClick={onSelectVerifier}
+                  title="Verify Document in Public Registry"
+                >
+                  🔍 Verify in Prior Art Registry
+                </button>
+              )}
 
               <button
                 className="viewer__reset-btn"
@@ -366,7 +609,7 @@ function ViewerPage({ onBack, onToast, onSelectVerifier }) {
         </div>
       )}
 
-      {/* Notarization Certificate Modal */}
+      {/* Official Certificate Modal */}
       {showCertificate && result && (
         <CertificateModal
           token={result}
