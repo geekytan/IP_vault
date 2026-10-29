@@ -465,7 +465,7 @@ function OwnerDashboard({ onBack, onToast, onSelectVerifier }) {
               </div>
             </div>
             {onSelectVerifier && (
-              <button className="nav-action-btn" onClick={onSelectVerifier}>
+              <button className="nav-action-btn" onClick={onSelectVerifier} title="Open Public Prior Art Verifier">
                 <Search size={14} />
                 <span>Public Verifier</span>
               </button>
@@ -516,20 +516,22 @@ function OwnerDashboard({ onBack, onToast, onSelectVerifier }) {
               <span className="brand-name">IP VAULT</span>
               <span className="brand-sub">CREATOR LEDGER</span>
             </div>
+          </div>
+          <div className="dashboard__topbar-right">
             {onSelectVerifier && (
               <button className="nav-action-btn" onClick={onSelectVerifier} title="Open Public Prior Art Verifier">
                 <Search size={14} />
                 <span>Public Verifier</span>
               </button>
             )}
+            <WalletConnect
+              account={account}
+              isLoading={isConnecting}
+              onConnect={connectWallet}
+              onDisconnect={disconnectWallet}
+              onSwitchAccount={switchAccount}
+            />
           </div>
-          <WalletConnect
-            account={account}
-            isLoading={isConnecting}
-            onConnect={connectWallet}
-            onDisconnect={disconnectWallet}
-            onSwitchAccount={switchAccount}
-          />
         </div>
 
         {/* ── Metric Stats Row ── */}
