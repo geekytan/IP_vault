@@ -1,5 +1,19 @@
 import React, { useEffect, useState } from "react";
 import QRCode from "qrcode";
+import {
+  ShieldCheck,
+  FileText,
+  Download,
+  Printer,
+  X,
+  Lock,
+  Globe,
+  ExternalLink,
+  Fingerprint,
+  Check,
+  Copy,
+  Hash,
+} from "lucide-react";
 import { CONTRACT_ADDRESS } from "../utils/contract";
 import "./CertificateModal.css";
 
@@ -41,7 +55,7 @@ function CertificateModal({ token, ownerAddress, onClose }) {
       width: 140,
       margin: 1,
       color: {
-        dark: "#0f172a",
+        dark: "#08090c",
         light: "#ffffff",
       },
     })
@@ -98,25 +112,27 @@ function CertificateModal({ token, ownerAddress, onClose }) {
         {/* Modal Controls (Hidden in Print) */}
         <div className="cert-modal-actions no-print">
           <div className="cert-modal-actions-left">
-            <span className="cert-pill">📜 Bernstein-Standard Notarization</span>
+            <span className="cert-pill">
+              <FileText size={13} /> Bernstein-Standard Notarization
+            </span>
           </div>
           <div className="cert-modal-actions-right">
             <button className="cert-btn cert-btn--secondary" onClick={handleDownloadJSON}>
-              ⬇️ Export JSON
+              <Download size={14} /> Export JSON
             </button>
             <button className="cert-btn cert-btn--primary" onClick={handlePrint}>
-              🖨️ Print / Save as PDF
+              <Printer size={14} /> Print / Save PDF
             </button>
             <button className="cert-btn-close" onClick={onClose} title="Close certificate">
-              ✕
+              <X size={16} />
             </button>
           </div>
         </div>
 
-        {/* ── Official Certificate Document ── */}
+        {/* Official Certificate Document */}
         <div className="cert-document" id="printable-certificate">
           <div className="cert-document-inner">
-            {/* Watermark & Security Border */}
+            {/* Guilloche Security Corners */}
             <div className="cert-corner cert-corner--tl" />
             <div className="cert-corner cert-corner--tr" />
             <div className="cert-corner cert-corner--bl" />
@@ -126,7 +142,7 @@ function CertificateModal({ token, ownerAddress, onClose }) {
             <div className="cert-header">
               <div className="cert-seal">
                 <div className="cert-seal-inner">
-                  <span>🛡️</span>
+                  <ShieldCheck size={28} strokeWidth={2} />
                 </div>
               </div>
               <div className="cert-header-content">
@@ -146,7 +162,7 @@ function CertificateModal({ token, ownerAddress, onClose }) {
 
             {/* Main Attestation Statement */}
             <div className="cert-statement">
-              This certificate formally attests that the digital intellectual property identified below has been cryptographically registered and anchored to the Ethereum blockchain. The digital fingerprint was computed using a zero-knowledge SHA-256 algorithm and permanently bound to a decentralized token identifier.
+              This certificate formally attests that the digital intellectual property identified below has been cryptographically registered and anchored to the Ethereum blockchain. The digital fingerprint was computed using a client-side zero-knowledge SHA-256 algorithm and permanently bound to a decentralized token identifier.
             </div>
 
             {/* Metadata Grid */}
@@ -180,16 +196,22 @@ function CertificateModal({ token, ownerAddress, onClose }) {
 
               <div className="cert-field cert-field--half">
                 <span className="cert-label">Confidentiality Status</span>
-                <span className="cert-value">
-                  {isEncrypted ? "🔒 Zero-Knowledge Encrypted (AES-256-GCM)" : "🌐 Public Prior Art Publication"}
+                <span className="cert-value cert-status-wrap">
+                  {isEncrypted ? (
+                    <span className="cert-status-tag encrypted">
+                      <Lock size={12} /> Zero-Knowledge Encrypted (AES-256-GCM)
+                    </span>
+                  ) : (
+                    <span className="cert-status-tag public">
+                      <Globe size={12} /> Public Prior Art Publication
+                    </span>
+                  )}
                 </span>
               </div>
 
               <div className="cert-field cert-field--half">
                 <span className="cert-label">Legal IP Category</span>
-                <span className="cert-value">
-                  {categoryName}
-                </span>
+                <span className="cert-value">{categoryName}</span>
               </div>
 
               <div className="cert-field cert-field--half">
@@ -207,7 +229,7 @@ function CertificateModal({ token, ownerAddress, onClose }) {
                   target="_blank"
                   rel="noopener noreferrer"
                 >
-                  {CONTRACT_ADDRESS} ↗
+                  {CONTRACT_ADDRESS} <ExternalLink size={12} />
                 </a>
               </div>
 
@@ -219,7 +241,7 @@ function CertificateModal({ token, ownerAddress, onClose }) {
                   target="_blank"
                   rel="noopener noreferrer"
                 >
-                  {fileCID} ↗
+                  {fileCID} <ExternalLink size={12} />
                 </a>
               </div>
             </div>
@@ -228,17 +250,26 @@ function CertificateModal({ token, ownerAddress, onClose }) {
             <div className="cert-hash-section">
               <div className="cert-hash-header">
                 <div className="cert-hash-title">
-                  <span>⚡</span> SHA-256 Cryptographic Fingerprint
+                  <Fingerprint size={14} /> SHA-256 Cryptographic Fingerprint
                 </div>
                 <button
                   className="cert-copy-hash-btn no-print"
                   onClick={handleCopyHash}
                   title="Copy SHA-256 hash"
                 >
-                  {copiedHash ? "✓ Copied" : "Copy Hash"}
+                  {copiedHash ? (
+                    <>
+                      <Check size={12} /> Copied
+                    </>
+                  ) : (
+                    <>
+                      <Copy size={12} /> Copy Hash
+                    </>
+                  )}
                 </button>
               </div>
               <div className="cert-hash-display">
+                <Hash size={13} className="hash-prefix-icon" />
                 <code>0x{sha256}</code>
               </div>
               <div className="cert-hash-note">
@@ -251,7 +282,7 @@ function CertificateModal({ token, ownerAddress, onClose }) {
               <div className="cert-footer-text">
                 <strong>LEGAL EVIDENTIARY DECLARATION:</strong>
                 <p>
-                  Pursuant to prevailing electronic evidence statutes (including the US DTSA, EU Trade Secrets Directive 2016/943, and the Berne Convention for the Protection of Literary and Artistic Works), this cryptographic certificate provides tamper-proof evidentiary proof of creation, content integrity, and prior art ownership as of the blockchain timestamp.
+                  Pursuant to prevailing electronic evidence statutes (including the US Defend Trade Secrets Act § 1836, EU Trade Secrets Directive 2016/943, and the Berne Convention for the Protection of Literary and Artistic Works), this cryptographic certificate provides tamper-proof evidentiary proof of creation, content integrity, and prior art ownership as of the blockchain timestamp.
                 </p>
               </div>
 
@@ -272,4 +303,3 @@ function CertificateModal({ token, ownerAddress, onClose }) {
 }
 
 export default CertificateModal;
-

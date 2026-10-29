@@ -1,4 +1,5 @@
 import React from "react";
+import { Wallet, ArrowLeftRight, X } from "lucide-react";
 import "./WalletConnect.css";
 
 function WalletConnect({ account, isLoading, onConnect, onDisconnect, onSwitchAccount }) {
@@ -13,9 +14,10 @@ function WalletConnect({ account, isLoading, onConnect, onDisconnect, onSwitchAc
           <button
             className="wc__switch-btn"
             onClick={onSwitchAccount}
-            title="Switch MetaMask account (Account 1 / Account 2)"
+            title="Switch MetaMask Account"
           >
-            🔄 Switch
+            <ArrowLeftRight size={12} />
+            <span>Switch</span>
           </button>
         )}
         <button
@@ -23,7 +25,7 @@ function WalletConnect({ account, isLoading, onConnect, onDisconnect, onSwitchAc
           onClick={onDisconnect}
           title="Disconnect wallet"
         >
-          ✕
+          <X size={13} />
         </button>
       </div>
     );
@@ -43,7 +45,7 @@ function WalletConnect({ account, isLoading, onConnect, onDisconnect, onSwitchAc
         </>
       ) : (
         <>
-          <span className="wc__metamask-icon">🦊</span>
+          <Wallet size={16} />
           <span>Connect Wallet</span>
         </>
       )}

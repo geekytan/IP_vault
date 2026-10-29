@@ -1,5 +1,26 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { ethers } from "ethers";
+import {
+  ShieldCheck,
+  ArrowLeft,
+  RefreshCw,
+  UploadCloud,
+  Lock,
+  FileText,
+  Key,
+  Download,
+  Search,
+  Scale,
+  Check,
+  Archive,
+  ExternalLink,
+  Boxes,
+  Layers,
+  ArrowRightLeft,
+  Fingerprint,
+  FileCheck2,
+  HardDrive
+} from "lucide-react";
 import WalletConnect from "./WalletConnect";
 import { getContract, IP_CATEGORIES, LICENSE_TYPES } from "../utils/contract";
 import { generateAccessKey, saveLocalAssetKey, getLocalAssetKey } from "../utils/accessKey";
@@ -26,6 +47,7 @@ function OwnerDashboard({ onBack, onToast, onSelectVerifier }) {
   const [category, setCategory] = useState(1); // 1 = PatentPriorArt
   const [licenseType, setLicenseType] = useState(0); // 0 = AllRightsReserved
   const [royaltyPercent, setRoyaltyPercent] = useState("5.0");
+  const [viewMode, setViewMode] = useState("table"); // "table" | "grid"
   const [showArchived, setShowArchived] = useState(false);
   const [archivedIds, setArchivedIds] = useState(() => {
     const saved = localStorage.getItem("archived_tokens");
@@ -37,18 +59,18 @@ function OwnerDashboard({ onBack, onToast, onSelectVerifier }) {
   }, [archivedIds]);
 
   const handleArchive = (tokenId) => {
-    if (window.confirm("Archive this NFT? It will be hidden from the active list.")) {
+    if (window.confirm("Archive this record? It will be filed in the archival registry.")) {
       setArchivedIds([...archivedIds, tokenId]);
-      onToast("NFT moved to Archive", "info");
+      onToast("Record archived", "info");
     }
   };
 
   const handleUnarchive = (tokenId) => {
     setArchivedIds(archivedIds.filter((id) => id !== tokenId));
-    onToast("NFT restored to Active", "success");
+    onToast("Record restored to active registry", "success");
   };
 
-  // ---- Handle File Selection & Immediate SHA-256 Fingerprint ----
+  // ---- Handle Local File Selection & SHA-256 Fingerprinting ----
   const handleFileChange = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -58,18 +80,16 @@ function OwnerDashboard({ onBack, onToast, onSelectVerifier }) {
     setStagedEncryptionKeys(null);
 
     try {
-      // Calculate cryptographic SHA-256 fingerprint in-browser
-      onToast("Computing zero-knowledge SHA-256 digest…", "info");
       const { hex } = await computeSHA256(file);
       setFileHash(hex);
-      onToast("Fingerprint computed! Ready to encrypt & upload.", "success");
+      onToast("SHA-256 fingerprint generated in browser memory", "info");
     } catch (err) {
-      console.error("Hash calculation error:", err);
-      onToast("Failed to compute file fingerprint", "error");
+      console.error("SHA-256 calculation failed", err);
+      onToast("Failed to compute SHA-256 fingerprint", "error");
     }
   };
 
-  // ---- Encrypt & Upload to IPFS ----
+  // ---- Upload to IPFS (with optional client-side encryption) ----
   const handleUploadToIPFS = async () => {
     if (!selectedFile) return;
 
@@ -78,7 +98,7 @@ function OwnerDashboard({ onBack, onToast, onSelectVerifier }) {
       let uploadFile;
 
       if (isEncryptedMode) {
-        onToast("🔒 Encrypting file with AES-256-GCM in browser…", "info");
+        onToast("Encrypting payload with AES-256-GCM in browser…", "info");
         const encResult = await encryptFile(selectedFile);
         uploadFile = new File(
           [encResult.encryptedBlob],
@@ -97,14 +117,14 @@ function OwnerDashboard({ onBack, onToast, onSelectVerifier }) {
         setStagedEncryptionKeys(null);
       }
 
-      onToast("Pinning payload to IPFS via Pinata…", "info");
-      const ipfsHash = await pinFileToPinata(uploadFile, uploadFile.name);
-      setCid(ipfsHash);
+      onToast("Pinning payload to decentralized IPFS…", "info");
+      const pinnedCid = await pinFileToPinata(uploadFile);
+      setCid(pinnedCid);
 
       onToast(
         isEncryptedMode
-          ? "🛡️ Encrypted ciphertext pinned! Ready to mint."
-          : "File pinned! Ready to mint.",
+          ? "Encrypted ciphertext pinned! Ready to notarize on-chain."
+          : "Payload pinned to IPFS! Ready to notarize on-chain.",
         "success"
       );
     } catch (error) {
@@ -118,44 +138,34 @@ function OwnerDashboard({ onBack, onToast, onSelectVerifier }) {
   // ---- Wallet Connection ----
   const connectWallet = async () => {
     if (!window.ethereum) {
-      onToast("Please install MetaMask to continue!", "error");
+      onToast("MetaMask not detected. Please install MetaMask.", "error");
       return;
     }
 
     setIsConnecting(true);
     try {
-      await window.ethereum.request({
-        method: "wallet_switchEthereumChain",
-        params: [{ chainId: "0xaa36a7" }],
-      });
-
-      const accounts = await window.ethereum.request({
-        method: "eth_requestAccounts",
-      });
-
       const provider = new ethers.BrowserProvider(window.ethereum);
+      const accounts = await provider.send("eth_requestAccounts", []);
       const signer = await provider.getSigner();
-      const contractInstance = getContract(signer);
 
-      setContract(contractInstance);
       setAccount(accounts[0]);
-      onToast("Wallet connected successfully!", "success");
+      const ipContract = getContract(signer);
+      setContract(ipContract);
+
+      const network = await provider.getNetwork();
+      if (network.chainId !== 11155111n) {
+        onToast("Switched wallet to Ethereum Sepolia", "info");
+      } else {
+        onToast("Wallet authenticated on Sepolia", "success");
+      }
     } catch (error) {
       console.error(error);
-      onToast("Failed to connect wallet", "error");
+      onToast(error.message || "Failed to authenticate wallet", "error");
     } finally {
       setIsConnecting(false);
     }
   };
 
-  const disconnectWallet = () => {
-    setAccount(null);
-    setContract(null);
-    setTokens([]);
-    onToast("Wallet disconnected", "info");
-  };
-
-  // ---- Explicitly Prompt & Switch Account (Account 1 / Account 2) ----
   const switchAccount = async () => {
     if (!window.ethereum) return;
     try {
@@ -163,79 +173,82 @@ function OwnerDashboard({ onBack, onToast, onSelectVerifier }) {
         method: "wallet_requestPermissions",
         params: [{ eth_accounts: {} }],
       });
-      await connectWallet();
-    } catch (e) {
-      console.warn("Account switch cancelled or failed", e);
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const accounts = await provider.send("eth_accounts", []);
+      if (accounts.length > 0) {
+        const signer = await provider.getSigner();
+        setAccount(accounts[0]);
+        setContract(getContract(signer));
+        onToast(`Switched active wallet to ${accounts[0].slice(0, 6)}···${accounts[0].slice(-4)}`, "success");
+      }
+    } catch (error) {
+      console.error("Error switching account:", error);
     }
   };
 
-  // ---- Real-time Account & Chain Synchronization ----
-  useEffect(() => {
-    if (!window.ethereum) return;
-
-    const handleAccountsChanged = async (accounts) => {
-      if (!accounts || accounts.length === 0) {
-        setAccount(null);
-        setContract(null);
-        setTokens([]);
-        onToast("Wallet disconnected", "info");
-      } else {
-        const newAccount = accounts[0];
-        setAccount(newAccount);
-        try {
-          const provider = new ethers.BrowserProvider(window.ethereum);
-          const signer = await provider.getSigner();
-          setContract(getContract(signer));
-          onToast(`Active account: ${newAccount.slice(0, 6)}···${newAccount.slice(-4)}`, "info");
-        } catch (e) {
-          console.error("Error updating signer on account change:", e);
-        }
-      }
-    };
-
-    const handleChainChanged = () => {
-      window.location.reload();
-    };
-
-    window.ethereum.on("accountsChanged", handleAccountsChanged);
-    window.ethereum.on("chainChanged", handleChainChanged);
-
-    return () => {
-      if (window.ethereum.removeListener) {
-        window.ethereum.removeListener("accountsChanged", handleAccountsChanged);
-        window.ethereum.removeListener("chainChanged", handleChainChanged);
-      }
-    };
+  const disconnectWallet = useCallback(() => {
+    setAccount(null);
+    setContract(null);
+    setTokens([]);
+    onToast("Wallet disconnected", "info");
   }, [onToast]);
 
-  // ---- Fetch Tokens ----
+  useEffect(() => {
+    if (window.ethereum) {
+      const handleAccountsChanged = async (accounts) => {
+        if (accounts.length === 0) {
+          disconnectWallet();
+        } else if (accounts[0] !== account) {
+          setAccount(accounts[0]);
+          try {
+            const provider = new ethers.BrowserProvider(window.ethereum);
+            const signer = await provider.getSigner();
+            setContract(getContract(signer));
+            onToast(`Active account switched to ${accounts[0].slice(0, 6)}···${accounts[0].slice(-4)}`, "info");
+          } catch (e) {
+            console.error("Error updating signer on account change:", e);
+          }
+        }
+      };
+
+      window.ethereum.on("accountsChanged", handleAccountsChanged);
+      return () => {
+        window.ethereum.removeListener("accountsChanged", handleAccountsChanged);
+      };
+    }
+  }, [account, disconnectWallet, onToast]);
+
+  // ---- Fetch Tokens Owned by Account ----
   const fetchTokens = useCallback(async () => {
     if (!contract || !account) return;
 
     try {
       const tokenIds = await contract.getTokensByOwner(account);
+
       const tokenData = await Promise.all(
-        tokenIds.map(async (id) => {
-          const tokenId = Number(id);
+        tokenIds.map(async (tokenIdBN) => {
+          const tokenId = Number(tokenIdBN);
           const metadataCID = await contract.tokenURI(tokenId);
 
           let metadata = null;
           try {
             metadata = await fetchIPFSJSON(metadataCID);
           } catch (e) {
-            console.warn(`Could not fetch metadata for token #${tokenId}`, e);
+            console.warn(`Could not fetch metadata for token ${tokenId}`, e);
           }
 
-          const localKey = getLocalAssetKey(tokenId);
-
-          return { tokenId, metadataCID, metadata, hasLocalKey: Boolean(localKey) };
+          return {
+            tokenId,
+            metadataCID,
+            metadata,
+          };
         })
       );
 
       setTokens(tokenData);
     } catch (error) {
       console.error(error);
-      onToast("Failed to fetch NFTs", "error");
+      onToast("Failed to fetch on-chain records", "error");
     }
   }, [contract, account, onToast]);
 
@@ -245,10 +258,10 @@ function OwnerDashboard({ onBack, onToast, onSelectVerifier }) {
     }
   }, [contract, account, fetchTokens]);
 
-  // ---- Mint NFT ----
+  // ---- Mint & Notarize Record ----
   const mintNFT = async () => {
-    if (!contract) return onToast("Connect wallet first", "error");
-    if (!cid.trim()) return onToast("Upload a file or enter CID first", "error");
+    if (!contract) return onToast("Authenticate wallet first", "error");
+    if (!cid.trim()) return onToast("Upload a file or enter IPFS CID first", "error");
 
     setIsMinting(true);
     try {
@@ -257,7 +270,7 @@ function OwnerDashboard({ onBack, onToast, onSelectVerifier }) {
 
       const metadata = {
         name: selectedFile ? selectedFile.name : "Manual Entry",
-        description: description || "No description provided",
+        description: description || "No formal description provided",
         fileCID: cid,
         sha256: fileHash || null,
         category: Number(category),
@@ -275,19 +288,18 @@ function OwnerDashboard({ onBack, onToast, onSelectVerifier }) {
         type: "IP_VAULT_METADATA_V2",
       };
 
-      onToast("Pinning metadata to IPFS…", "info");
+      onToast("Pinning metadata to decentralized IPFS…", "info");
       const finalHash = await pinJSONToPinata(metadata);
 
-      onToast("Minting NFT on blockchain…", "info");
+      onToast("Submitting consensus transaction to Ethereum Sepolia…", "info");
 
-      // Check if contract has v2 registerIPRecord function
       let tx;
       if (typeof contract.registerIPRecord === "function" && fileHash) {
         try {
           const hashBytes32 = fileHash.startsWith("0x") ? fileHash : `0x${fileHash}`;
           const licensingTuple = [
             Number(licenseType),
-            Math.round(Number(royaltyPercent || 0) * 100), // basis points
+            Math.round(Number(royaltyPercent || 0) * 100),
             Number(licenseType) === 2 || Number(licenseType) === 3,
             "",
           ];
@@ -299,7 +311,7 @@ function OwnerDashboard({ onBack, onToast, onSelectVerifier }) {
             isEncryptedMode
           );
         } catch (v2Err) {
-          console.warn("registerIPRecord reverted, falling back to mintIPRecord:", v2Err);
+          console.warn("registerIPRecord fallback to mintIPRecord:", v2Err);
           tx = await contract.mintIPRecord(finalHash);
         }
       } else {
@@ -308,13 +320,13 @@ function OwnerDashboard({ onBack, onToast, onSelectVerifier }) {
 
       const receipt = await tx.wait();
 
-      // Extract minted token ID from transaction logs
+      // Extract minted token ID from logs
       let mintedTokenId = null;
       if (receipt && receipt.logs) {
         for (const log of receipt.logs) {
           try {
             const parsed = contract.interface.parseLog(log);
-            if (parsed && (parsed.name === "IPRecordMinted" || parsed.name === "Transfer")) {
+            if (parsed && (parsed.name === "IPRecordMinted" || parsed.name === "IPRecordRegistered" || parsed.name === "Transfer")) {
               mintedTokenId = Number(parsed.args.tokenId);
               break;
             }
@@ -322,7 +334,6 @@ function OwnerDashboard({ onBack, onToast, onSelectVerifier }) {
         }
       }
 
-      // Persist client-side decryption key securely in creator's browser
       if (isEncryptedMode && stagedEncryptionKeys && mintedTokenId !== null) {
         saveLocalAssetKey(mintedTokenId, {
           keyBase64: stagedEncryptionKeys.keyBase64,
@@ -334,8 +345,8 @@ function OwnerDashboard({ onBack, onToast, onSelectVerifier }) {
 
       onToast(
         mintedTokenId !== null
-          ? `🎉 Token #${mintedTokenId} Minted Successfully!`
-          : "🎉 NFT Minted Successfully!",
+          ? `Record #${mintedTokenId} Notarized on Ethereum!`
+          : "IP Record Successfully Anchored on-chain!",
         "success"
       );
 
@@ -347,7 +358,7 @@ function OwnerDashboard({ onBack, onToast, onSelectVerifier }) {
       await fetchTokens();
     } catch (error) {
       console.error("Minting error:", error);
-      onToast(error.message || "Minting failed", "error");
+      onToast(error.message || "Minting transaction failed", "error");
     } finally {
       setIsMinting(false);
     }
@@ -367,14 +378,14 @@ function OwnerDashboard({ onBack, onToast, onSelectVerifier }) {
         sha256Hex: localKey.sha256Hex,
         name: localKey.name || token?.metadata?.name,
       });
-      onToast("🔒 Cryptographic Decryption Key copied to clipboard!", "success");
+      onToast("Cryptographic access key copied to clipboard", "success");
     } else {
       key = generateAccessKey({
         tokenId,
         sha256Hex: token?.metadata?.sha256 || null,
         name: token?.metadata?.name || null,
       });
-      onToast("Access key copied!", "info");
+      onToast("Access key copied to clipboard", "info");
     }
 
     try {
@@ -393,86 +404,82 @@ function OwnerDashboard({ onBack, onToast, onSelectVerifier }) {
     }
   };
 
-  // ---- Safe In-Browser Download (Bypasses Windows Defender Gateway Filter) ----
-  const handleDownloadAsset = async (token) => {
-    const fileCID = token.metadata?.fileCID || token.metadataCID;
-    const name = token.metadata?.name || `asset_${token.tokenId}`;
-    onToast("Fetching file safely from IPFS…", "info");
-
+  // ---- In-Memory Direct Safe Download ----
+  const handleSafeDownload = async (fileCID, fileName) => {
+    onToast("Fetching file safely into memory…", "info");
     try {
       const blob = await fetchIPFSBlob(fileCID);
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = name;
+      a.download = fileName || `asset_${fileCID.slice(0, 10)}`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      onToast("Download complete!", "success");
+      onToast("Download complete", "success");
     } catch (e) {
       console.error(e);
-      onToast("Failed to fetch file from IPFS. Retrying via gateway…", "error");
       window.open(`https://gateway.pinata.cloud/ipfs/${fileCID}`, "_blank");
     }
   };
 
   // ---- Transfer NFT ----
   const handleTransfer = async (tokenId) => {
-    const toAddress = prompt("Enter the wallet address to transfer this NFT to:");
+    const toAddress = prompt("Enter recipient Ethereum address:");
     if (!toAddress) return;
 
     if (!ethers.isAddress(toAddress)) {
-      onToast("Invalid wallet address", "error");
+      onToast("Invalid Ethereum address", "error");
       return;
     }
 
     try {
-      onToast("Transferring NFT…", "info");
+      onToast("Submitting transfer transaction…", "info");
       const tx = await contract.transferFrom(account, toAddress, tokenId);
       await tx.wait();
-      onToast("NFT transferred successfully! 🚀", "success");
+      onToast("Ownership rights transferred successfully", "success");
       await fetchTokens();
     } catch (error) {
       console.error(error);
-      onToast("Transfer failed", "error");
+      onToast(error.message || "Transfer failed", "error");
     }
   };
 
-  // ─── NOT CONNECTED ────────────────────────────────
+  // ─── NOT CONNECTED VIEW ────────────────────────────────
   if (!account) {
     return (
       <div className="dashboard">
-        <div className="dashboard__orb dashboard__orb--1" />
-        <div className="dashboard__orb dashboard__orb--2" />
+        <div className="dashboard__grid-bg" />
         <div className="dashboard__inner">
           <div className="dashboard__topbar">
             <div className="dashboard__topbar-left">
               <button className="back-button" onClick={onBack}>
-                <span className="arrow">←</span> Back
+                <ArrowLeft size={15} />
+                <span>Home</span>
               </button>
               <div className="dashboard__brand">
-                <span className="dashboard__brand-icon">🛡️</span>
-                <span className="dashboard__brand-name">IP Vault</span>
+                <ShieldCheck size={18} className="brand-icon" />
+                <span className="brand-name">IP VAULT</span>
+                <span className="brand-sub">CREATOR STUDIO</span>
               </div>
-              {onSelectVerifier && (
-                <button
-                  className="nav-action-btn"
-                  onClick={onSelectVerifier}
-                  title="Open Public Prior Art Verifier"
-                  style={{ marginLeft: 12 }}
-                >
-                  <span>🔍</span> Public Verifier
-                </button>
-              )}
             </div>
+            {onSelectVerifier && (
+              <button className="nav-action-btn" onClick={onSelectVerifier}>
+                <Search size={14} />
+                <span>Public Verifier</span>
+              </button>
+            )}
           </div>
+
           <div className="dashboard__wallet-prompt">
-            <span className="dashboard__wallet-prompt-icon">🦊</span>
-            <h2 className="dashboard__wallet-prompt-title">Connect Your Wallet</h2>
+            <div className="prompt-icon-box">
+              <ShieldCheck size={36} />
+            </div>
+            <h2 className="dashboard__wallet-prompt-title">Authenticate Creator Identity</h2>
             <p className="dashboard__wallet-prompt-desc">
-              Connect your MetaMask wallet to notarize intellectual property, encrypt confidential assets,
-              and mint verifiable ERC-721 records on the Ethereum blockchain.
+              Connect your Ethereum wallet to establish immutable prior art, encrypt confidential assets
+              with Web Crypto hardware acceleration, and mint verified ERC-721 records.
             </p>
             <WalletConnect
               account={null}
@@ -490,31 +497,29 @@ function OwnerDashboard({ onBack, onToast, onSelectVerifier }) {
   const activeTokens = tokens.filter((t) => !archivedIds.includes(t.tokenId));
   const archivedTokens = tokens.filter((t) => archivedIds.includes(t.tokenId));
   const displayTokens = showArchived ? archivedTokens : activeTokens;
+  const encryptedCount = tokens.filter((t) => t.metadata?.isEncrypted).length;
 
   return (
     <div className="dashboard">
-      <div className="dashboard__orb dashboard__orb--1" />
-      <div className="dashboard__orb dashboard__orb--2" />
+      <div className="dashboard__grid-bg" />
       <div className="dashboard__inner">
 
         {/* ── Top Bar ── */}
         <div className="dashboard__topbar">
           <div className="dashboard__topbar-left">
             <button className="back-button" onClick={onBack}>
-              <span className="arrow">←</span> Back
+              <ArrowLeft size={15} />
+              <span>Home</span>
             </button>
             <div className="dashboard__brand">
-              <span className="dashboard__brand-icon">🛡️</span>
-              <span className="dashboard__brand-name">IP Vault</span>
+              <ShieldCheck size={18} className="brand-icon" />
+              <span className="brand-name">IP VAULT</span>
+              <span className="brand-sub">CREATOR LEDGER</span>
             </div>
             {onSelectVerifier && (
-              <button
-                className="nav-action-btn"
-                onClick={onSelectVerifier}
-                title="Open Public Prior Art Verifier"
-                style={{ marginLeft: 12 }}
-              >
-                <span>🔍</span> Public Verifier
+              <button className="nav-action-btn" onClick={onSelectVerifier} title="Open Public Prior Art Verifier">
+                <Search size={14} />
+                <span>Public Verifier</span>
               </button>
             )}
           </div>
@@ -527,412 +532,516 @@ function OwnerDashboard({ onBack, onToast, onSelectVerifier }) {
           />
         </div>
 
-        {/* ── Stats ── */}
-        <div className="dashboard__stats">
-          <div className="stat-card stat-card--blue">
-            <div className="stat-card__label">Total NFTs</div>
-            <div className="stat-card__value stat-card__value--blue">{tokens.length}</div>
+        {/* ── Metric Stats Row ── */}
+        <div className="dashboard__metrics">
+          <div className="metric-box">
+            <span className="metric-label">TOTAL REGISTERED</span>
+            <div className="metric-value">{tokens.length}</div>
+            <span className="metric-sub">ERC-721 Records</span>
           </div>
-          <div className="stat-card stat-card--emerald">
-            <div className="stat-card__label">Active</div>
-            <div className="stat-card__value stat-card__value--emerald">{activeTokens.length}</div>
+          <div className="metric-box metric-box--emerald">
+            <span className="metric-label">ACTIVE PROVENANCE</span>
+            <div className="metric-value text-emerald">{activeTokens.length}</div>
+            <span className="metric-sub">Protected Assets</span>
           </div>
-          <div className="stat-card stat-card--violet">
-            <div className="stat-card__label">Encryption Standard</div>
-            <div className="stat-card__value stat-card__value--violet" style={{ fontSize: "1.05rem" }}>AES-256-GCM</div>
+          <div className="metric-box metric-box--purple">
+            <span className="metric-label">ZERO-KNOWLEDGE ENCRYPTED</span>
+            <div className="metric-value text-purple">{encryptedCount}</div>
+            <span className="metric-sub">AES-256-GCM Enclaves</span>
           </div>
-          <div className="stat-card stat-card--cyan">
-            <div className="stat-card__label">Network</div>
-            <div className="stat-card__value stat-card__value--cyan">Sepolia</div>
+          <div className="metric-box">
+            <span className="metric-label">ARCHIVED RECORDS</span>
+            <div className="metric-value">{archivedTokens.length}</div>
+            <span className="metric-sub">Cold Storage</span>
           </div>
         </div>
 
-        {/* ── Upload & Mint ── */}
-        <div className="dashboard__upload">
-          {/* Step progress */}
-          <div className="dashboard__steps">
-            <div className={`dashboard__step ${cid || selectedFile ? "dashboard__step--done" : "dashboard__step--active"}`}>
-              <div className="dashboard__step-num">{cid || selectedFile ? "✓" : "1"}</div>
-              <span className="dashboard__step-label">Select & Hash</span>
+        {/* ══════════════════════════════════════════════════
+            NOTARIZATION STUDIO PANEL
+        ══════════════════════════════════════════════════ */}
+        <div className="studio-panel">
+          <div className="studio-panel__header">
+            <div className="studio-panel__title-box">
+              <ShieldCheck size={18} className="text-emerald" />
+              <h3 className="studio-panel__title">Notarize New Intellectual Property</h3>
             </div>
-            <div className="dashboard__step-sep" />
-            <div className={`dashboard__step ${cid && !isMinting ? "dashboard__step--active" : cid && isMinting ? "dashboard__step--done" : ""}`}>
-              <div className="dashboard__step-num">2</div>
-              <span className="dashboard__step-label">Encrypt & Pin</span>
-            </div>
-            <div className="dashboard__step-sep" />
-            <div className={`dashboard__step ${isMinting ? "dashboard__step--active" : ""}`}>
-              <div className="dashboard__step-num">3</div>
-              <span className="dashboard__step-label">Mint NFT</span>
-            </div>
+            <span className="studio-panel__tag">Sepolia Registry v2.0</span>
           </div>
 
-          <h3 className="dashboard__section-title">🎨 Notarize & Mint IP NFT</h3>
-          <p className="dashboard__section-desc">
-            Protect your intellectual property with zero-knowledge SHA-256 fingerprinting,
-            optional client-side AES-256 encryption, and immutable ERC-721 blockchain notarization.
-          </p>
+          <div className="studio-panel__body">
+            {/* File Dropzone */}
+            <div className="studio-dropzone">
+              <input
+                type="file"
+                id="studio-file-input"
+                className="studio-dropzone__input"
+                onChange={handleFileChange}
+                disabled={isUploading || isMinting}
+              />
+              <label htmlFor="studio-file-input" className="studio-dropzone__label">
+                <UploadCloud size={32} className="dropzone-icon" />
+                <span className="dropzone-title">
+                  {selectedFile ? selectedFile.name : "Select or drag file to calculate SHA-256 fingerprint"}
+                </span>
+                <span className="dropzone-sub">
+                  {selectedFile
+                    ? `${(selectedFile.size / 1024).toFixed(1)} KB · Web Crypto Subtle (FIPS 180-4)`
+                    : "Patents, Trade Secrets, Datasets, Source Code, CAD (Computed in local RAM)"}
+                </span>
+              </label>
+            </div>
 
-          {/* Dropzone */}
-          <div className="dashboard__dropzone">
-            <input
-              type="file"
-              id="file-upload"
-              className="dashboard__file-input"
-              onChange={handleFileChange}
-              disabled={isUploading || isMinting}
-            />
-            <label
-              htmlFor="file-upload"
-              className={`dashboard__dropzone-label ${isUploading ? "loading" : ""}`}
-            >
-              {selectedFile ? (
-                <>
-                  <span className="upload-icon">📄</span>
-                  <span className="file-name">{selectedFile.name}</span>
-                  <span className="file-name-size">
-                    {(selectedFile.size / 1024).toFixed(1)} KB · Ready to Encrypt
-                  </span>
-                </>
-              ) : (
-                <>
-                  <span className="upload-icon">📁</span>
-                  <span className="upload-text">Click to Select or Drag & Drop File</span>
-                  <span className="upload-sub">PDFs, Code, Research, Media, Schematics · Hardware-Accelerated Hashing</span>
-                </>
-              )}
-            </label>
-          </div>
-
-          {/* Real-time Cryptographic Fingerprint Badge */}
-          {fileHash && (
-            <div className="dashboard__crypto-panel">
-              <div className="crypto-badge">
-                <span className="crypto-badge__icon">⚡</span>
-                <span className="crypto-badge__label">SHA-256 Fingerprint:</span>
-                <code className="crypto-badge__hash" title={`0x${fileHash}`}>
-                  0x{fileHash.slice(0, 16)}…{fileHash.slice(-12)}
-                </code>
+            {/* SHA-256 Fingerprint Display */}
+            {fileHash && (
+              <div className="studio-fingerprint">
+                <div className="fingerprint-header">
+                  <Fingerprint size={15} className="text-emerald" />
+                  <span className="fingerprint-label">SHA-256 Cryptographic Checksum</span>
+                  <span className="fingerprint-status">✓ Computed Locally</span>
+                </div>
+                <code className="fingerprint-code">0x{fileHash}</code>
               </div>
+            )}
 
-              {/* Zero-Knowledge Confidentiality Toggle */}
-              <div className="dashboard__security-toggle">
-                <label className="toggle-label">
+            {/* Encryption Mode Switch */}
+            {selectedFile && (
+              <div className="studio-security-card">
+                <label className="security-toggle">
                   <input
                     type="checkbox"
                     checked={isEncryptedMode}
                     onChange={(e) => setIsEncryptedMode(e.target.checked)}
                     disabled={isUploading || isMinting}
                   />
-                  <span className="toggle-custom" />
-                  <span className="toggle-text">
-                    <strong>Zero-Knowledge AES-256-GCM Encryption</strong>
-                    <small>Encrypt in browser before IPFS (Confidential / Trade Secrets)</small>
-                  </span>
+                  <span className="toggle-slider" />
+                  <div className="toggle-info">
+                    <span className="toggle-heading">Zero-Knowledge Client-Side Encryption (AES-256-GCM)</span>
+                    <span className="toggle-desc">
+                      Protects trade secrets and unpublished disclosures. Encrypts in RAM before IPFS upload.
+                    </span>
+                  </div>
                 </label>
+
+                {!cid && (
+                  <button
+                    type="button"
+                    className="studio-btn studio-btn--outline"
+                    onClick={handleUploadToIPFS}
+                    disabled={isUploading}
+                  >
+                    {isUploading ? (
+                      <>
+                        <span className="btn-spinner" />
+                        <span>{isEncryptedMode ? "Encrypting & Pinning…" : "Pinning to IPFS…"}</span>
+                      </>
+                    ) : (
+                      <>
+                        <Lock size={15} />
+                        <span>{isEncryptedMode ? "Encrypt & Pin Payload to IPFS" : "Pin Payload to IPFS"}</span>
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Decentralized Storage CID Input */}
+            <div className="studio-row">
+              <label className="studio-label">Decentralized Storage Reference (IPFS CID)</label>
+              <div className="studio-input-wrap">
+                <HardDrive size={15} className="input-icon" />
+                <input
+                  type="text"
+                  className="studio-input"
+                  placeholder="Qm... or bafy... (auto-fills upon local encryption)"
+                  value={cid}
+                  onChange={(e) => setCid(e.target.value)}
+                  disabled={isMinting || isUploading}
+                />
+              </div>
+            </div>
+
+            {/* Legal Description */}
+            <div className="studio-row">
+              <label className="studio-label">Evidentiary / Legal Description</label>
+              <textarea
+                className="studio-textarea"
+                placeholder="Enter formal title, patent claim summary, or trade secret scope declaration…"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                disabled={isMinting || isUploading}
+                rows={2}
+              />
+            </div>
+
+            {/* Legal IP Category & Story Protocol Licensing */}
+            <div className="studio-grid-2">
+              <div className="studio-row">
+                <label className="studio-label">
+                  <Scale size={14} className="text-emerald" />
+                  <span>Legal IP Category</span>
+                </label>
+                <select
+                  className="studio-select"
+                  value={category}
+                  onChange={(e) => setCategory(Number(e.target.value))}
+                  disabled={isMinting || isUploading}
+                >
+                  {IP_CATEGORIES.map((cat) => (
+                    <option key={cat.id} value={cat.id}>
+                      {cat.label}
+                    </option>
+                  ))}
+                </select>
               </div>
 
-              {/* Upload & Encrypt Action Button */}
-              {!cid && (
-                <button
-                  type="button"
-                  className="dashboard__store-btn"
-                  style={{ width: "100%", justifyContent: "center", marginTop: 12 }}
-                  onClick={handleUploadToIPFS}
-                  disabled={isUploading}
+              <div className="studio-row">
+                <label className="studio-label">
+                  <FileCheck2 size={14} className="text-emerald" />
+                  <span>Commercial Licensing Terms</span>
+                </label>
+                <select
+                  className="studio-select"
+                  value={licenseType}
+                  onChange={(e) => setLicenseType(Number(e.target.value))}
+                  disabled={isMinting || isUploading}
                 >
-                  {isUploading ? (
-                    <>
-                      <span className="btn-spinner" />
-                      {isEncryptedMode ? "Encrypting & Pinning…" : "Pinning to IPFS…"}
-                    </>
-                  ) : (
-                    <>
-                      {isEncryptedMode ? "🔒 Encrypt & Pin to IPFS" : "🌐 Pin Plaintext to IPFS"}
-                    </>
-                  )}
-                </button>
-              )}
+                  {LICENSE_TYPES.map((lic) => (
+                    <option key={lic.id} value={lic.id}>
+                      {lic.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
-          )}
 
-          <div className="dashboard__divider">or enter existing IPFS CID</div>
+            {/* Conditional Royalty Share */}
+            {Number(licenseType) === 2 && (
+              <div className="studio-royalty-box">
+                <label className="studio-label">Revenue Royalty Share (%):</label>
+                <input
+                  type="number"
+                  min="0"
+                  max="50"
+                  step="0.5"
+                  className="studio-input studio-input--compact"
+                  value={royaltyPercent}
+                  onChange={(e) => setRoyaltyPercent(e.target.value)}
+                  disabled={isMinting || isUploading}
+                />
+                <span className="studio-royalty-note">Percentage royalty payable on commercial derivative usage</span>
+              </div>
+            )}
 
-          <div className="dashboard__upload-row">
-            <input
-              type="text"
-              className="dashboard__input"
-              placeholder="IPFS CID (auto-fills on upload)"
-              value={cid}
-              onChange={(e) => setCid(e.target.value)}
-              disabled={isMinting || isUploading}
-              id="input-cid"
-            />
-          </div>
-
-          <div className="dashboard__upload-row" style={{ marginTop: 12 }}>
-            <textarea
-              className="dashboard__input dashboard__textarea"
-              placeholder="Write a brief legal/technical description of this IP asset…"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              disabled={isMinting || isUploading}
-              rows={3}
-              id="input-description"
-            />
-          </div>
-
-          {/* Legal IP Category & Commercial Licensing Selectors (Story Protocol & Bernstein Model) */}
-          <div className="dashboard__protocol-selectors">
-            <div className="dashboard__select-group">
-              <label className="dashboard__select-label">
-                <span>📁</span> Legal IP Category
-              </label>
-              <select
-                className="dashboard__select"
-                value={category}
-                onChange={(e) => setCategory(Number(e.target.value))}
-                disabled={isMinting || isUploading}
-                id="select-ip-category"
+            {/* Mint Action Button */}
+            <div className="studio-actions">
+              <button
+                className="studio-btn studio-btn--mint"
+                onClick={mintNFT}
+                disabled={isMinting || isUploading || !cid.trim()}
               >
-                {IP_CATEGORIES.map((cat) => (
-                  <option key={cat.id} value={cat.id}>
-                    {cat.label}
-                  </option>
-                ))}
-              </select>
+                {isMinting ? (
+                  <>
+                    <span className="btn-spinner" />
+                    <span>Anchoring to Ethereum Consensus…</span>
+                  </>
+                ) : (
+                  <>
+                    <ShieldCheck size={18} />
+                    <span>Notarize & Mint ERC-721 Record</span>
+                  </>
+                )}
+              </button>
             </div>
-
-            <div className="dashboard__select-group">
-              <label className="dashboard__select-label">
-                <span>⚖️</span> Commercial Licensing Terms
-              </label>
-              <select
-                className="dashboard__select"
-                value={licenseType}
-                onChange={(e) => setLicenseType(Number(e.target.value))}
-                disabled={isMinting || isUploading}
-                id="select-license-type"
-              >
-                {LICENSE_TYPES.map((lic) => (
-                  <option key={lic.id} value={lic.id}>
-                    {lic.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {Number(licenseType) === 2 && (
-            <div className="dashboard__royalty-row">
-              <label className="dashboard__select-label">
-                <span>💰</span> Royalty Share (%):
-              </label>
-              <input
-                type="number"
-                min="0"
-                max="50"
-                step="0.5"
-                className="dashboard__input"
-                style={{ width: 100, display: "inline-block" }}
-                value={royaltyPercent}
-                onChange={(e) => setRoyaltyPercent(e.target.value)}
-                placeholder="5.0"
-                disabled={isMinting || isUploading}
-              />
-              <span className="dashboard__royalty-hint">% royalty payable on commercial exploitation</span>
-            </div>
-          )}
-
-          <div className="dashboard__mint-row">
-            <button
-              className="dashboard__store-btn dashboard__store-btn--mint"
-              onClick={mintNFT}
-              disabled={isMinting || isUploading || !cid.trim()}
-              id="btn-mint-nft"
-            >
-              {isMinting ? (
-                <>
-                  <span className="btn-spinner" />
-                  Minting on Blockchain…
-                </>
-              ) : (
-                "🛡️ Notarize & Mint NFT"
-              )}
-            </button>
           </div>
         </div>
 
-        {/* ── Records ── */}
-        <div className="dashboard__records">
-          <div className="dashboard__records-header">
-            <div className="dashboard__tabs">
+        {/* ══════════════════════════════════════════════════
+            ON-CHAIN IP RECORDS LEDGER (LINEAR / STRIPE STYLE)
+        ══════════════════════════════════════════════════ */}
+        <div className="ledger-section">
+          <div className="ledger-header">
+            <div className="ledger-tabs">
               <button
-                className={`dashboard__tab ${!showArchived ? "active" : ""}`}
+                className={`ledger-tab ${!showArchived ? "active" : ""}`}
                 onClick={() => setShowArchived(false)}
-                id="tab-active"
               >
-                Active <span>{activeTokens.length}</span>
+                Active Registry <span>{activeTokens.length}</span>
               </button>
               <button
-                className={`dashboard__tab ${showArchived ? "active" : ""}`}
+                className={`ledger-tab ${showArchived ? "active" : ""}`}
                 onClick={() => setShowArchived(true)}
-                id="tab-archived"
               >
-                Archived <span>{archivedTokens.length}</span>
+                Archived Records <span>{archivedTokens.length}</span>
               </button>
             </div>
-            <button className="dashboard__refresh-btn" onClick={fetchTokens} id="btn-refresh">
-              🔄 Refresh
-            </button>
+
+            <div className="ledger-controls">
+              <div className="view-toggle">
+                <button
+                  className={`view-btn ${viewMode === "table" ? "active" : ""}`}
+                  onClick={() => setViewMode("table")}
+                  title="Table Ledger View"
+                >
+                  <Layers size={14} />
+                </button>
+                <button
+                  className={`view-btn ${viewMode === "grid" ? "active" : ""}`}
+                  onClick={() => setViewMode("grid")}
+                  title="Bento Card View"
+                >
+                  <Boxes size={14} />
+                </button>
+              </div>
+
+              <button className="ledger-refresh-btn" onClick={fetchTokens} title="Sync with blockchain">
+                <RefreshCw size={14} />
+                <span>Sync</span>
+              </button>
+            </div>
           </div>
 
+          {/* Empty State */}
           {tokens.length === 0 ? (
-            <div className="dashboard__empty">
-              <span className="dashboard__empty-icon">📦</span>
-              <p className="dashboard__empty-text">No NFTs notarized yet</p>
-              <p className="dashboard__empty-sub">Upload an asset above to create your first cryptographic IP record</p>
+            <div className="ledger-empty">
+              <ShieldCheck size={36} className="empty-icon" />
+              <h4 className="empty-title">No Intellectual Property Records Found</h4>
+              <p className="empty-sub">Upload and notarize an asset above to establish your first cryptographic record.</p>
             </div>
           ) : displayTokens.length === 0 ? (
-            <div className="dashboard__empty">
-              <span className="dashboard__empty-icon">{showArchived ? "📂" : "✨"}</span>
-              <p className="dashboard__empty-text">
-                {showArchived ? "No archived NFTs" : "All active NFTs shown"}
-              </p>
+            <div className="ledger-empty">
+              <Archive size={36} className="empty-icon" />
+              <h4 className="empty-title">{showArchived ? "No Archived Records" : "All Active Records Displayed"}</h4>
             </div>
-          ) : (
-            [...displayTokens].reverse().map((token) => {
-              const name = token.metadata?.name || `Token #${token.tokenId}`;
-              const desc = token.metadata?.description || "No description stored";
-              const fileCID = token.metadata?.fileCID || token.metadataCID;
-              const sha256 = token.metadata?.sha256;
-              const isEncrypted = token.metadata?.isEncrypted;
-              const isCopied = copiedIndex === token.tokenId;
+          ) : viewMode === "table" ? (
+            /* ── High-Density Data Table (Linear Style) ── */
+            <div className="ledger-table-wrap">
+              <table className="ledger-table">
+                <thead>
+                  <tr>
+                    <th>TOKEN</th>
+                    <th>ASSET / TITLE</th>
+                    <th>CATEGORY</th>
+                    <th>SHA-256 CHECKSUM</th>
+                    <th>LICENSING TERMS</th>
+                    <th>STORAGE</th>
+                    <th className="th-actions">ACTIONS</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...displayTokens].reverse().map((token) => {
+                    const name = token.metadata?.name || `Asset #${token.tokenId}`;
+                    const desc = token.metadata?.description;
+                    const fileCID = token.metadata?.fileCID || token.metadataCID;
+                    const sha256 = token.metadata?.sha256;
+                    const isEncrypted = token.metadata?.isEncrypted;
+                    const categoryName = token.metadata?.categoryName || "General IP";
+                    const licenseName = token.metadata?.licensing?.licenseName || "All Rights Reserved";
+                    const royaltyShare = token.metadata?.licensing?.royaltyPercent;
 
-              return (
-                <div
-                  className={`record-card ${showArchived ? "record-card--archived" : ""}`}
-                  key={token.tokenId}
-                >
-                  <div className="record-card__stripe" />
-                  <div className="record-card__body">
-                    <div className="record-card__top">
-                      <div className="record-card__main">
-                        <span className="record-card__index">#{token.tokenId}</span>
-                        <div className="record-card__info">
-                          <div className="record-card__name-row">
-                            <span className="record-card__name">{name}</span>
+                    return (
+                      <tr key={token.tokenId}>
+                        <td>
+                          <span className="token-id-badge">#{token.tokenId}</span>
+                        </td>
+                        <td>
+                          <div className="table-asset">
+                            <span className="table-asset-name">{name}</span>
+                            {desc && <span className="table-asset-desc">{desc}</span>}
+                          </div>
+                        </td>
+                        <td>
+                          <span className="table-category-pill">{categoryName}</span>
+                        </td>
+                        <td>
+                          {sha256 ? (
+                            <code className="table-hash" title={`0x${sha256}`}>
+                              0x{sha256.slice(0, 8)}…{sha256.slice(-6)}
+                            </code>
+                          ) : (
+                            <span className="text-muted">—</span>
+                          )}
+                        </td>
+                        <td>
+                          <div className="table-licensing">
+                            <span>{licenseName}</span>
+                            {royaltyShare > 0 && <span className="table-royalty">({royaltyShare}%)</span>}
+                          </div>
+                        </td>
+                        <td>
+                          <div className="table-storage">
                             {isEncrypted ? (
-                              <span className="badge badge--encrypted" title="Encrypted with client-side AES-256-GCM">
-                                🔒 AES-256 Encrypted
+                              <span className="status-chip status-chip--encrypted">
+                                <Lock size={11} /> AES-256
                               </span>
                             ) : (
-                              <span className="badge badge--public" title="Public IPFS record">
-                                🌐 Public
+                              <span className="status-chip status-chip--public">
+                                Public
                               </span>
                             )}
-                            {token.metadata?.categoryName && (
-                              <span className="badge badge--category" title="Legal IP Category">
-                                {token.metadata.categoryName}
-                              </span>
+                            <a
+                              href={`https://gateway.pinata.cloud/ipfs/${fileCID}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="table-cid-link"
+                              title="Inspect on IPFS Gateway"
+                            >
+                              <ExternalLink size={12} />
+                            </a>
+                          </div>
+                        </td>
+                        <td>
+                          <div className="table-actions">
+                            <button
+                              className="action-icon-btn action-icon-btn--cert"
+                              onClick={() => setSelectedCertToken(token)}
+                              title="Official Bernstein Certificate"
+                            >
+                              <FileText size={14} />
+                            </button>
+                            <button
+                              className="action-icon-btn"
+                              onClick={() => handleGenerateKey(token.tokenId)}
+                              title="Copy Access Key"
+                            >
+                              {copiedIndex === token.tokenId ? <Check size={14} className="text-emerald" /> : <Key size={14} />}
+                            </button>
+                            <button
+                              className="action-icon-btn"
+                              onClick={() => handleSafeDownload(fileCID, name)}
+                              title="Download File into RAM"
+                            >
+                              <Download size={14} />
+                            </button>
+                            <button
+                              className="action-icon-btn"
+                              onClick={() => handleTransfer(token.tokenId)}
+                              title="Transfer Ownership"
+                            >
+                              <ArrowRightLeft size={14} />
+                            </button>
+                            {showArchived ? (
+                              <button
+                                className="action-icon-btn"
+                                onClick={() => handleUnarchive(token.tokenId)}
+                                title="Restore Record"
+                              >
+                                <RefreshCw size={14} />
+                              </button>
+                            ) : (
+                              <button
+                                className="action-icon-btn action-icon-btn--archive"
+                                onClick={() => handleArchive(token.tokenId)}
+                                title="Archive Record"
+                              >
+                                <Archive size={14} />
+                              </button>
                             )}
                           </div>
-                          <div className="record-card__description">{desc}</div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            /* ── Bento Card Grid View ── */
+            <div className="ledger-grid">
+              {[...displayTokens].reverse().map((token) => {
+                const name = token.metadata?.name || `Asset #${token.tokenId}`;
+                const desc = token.metadata?.description || "No formal description stored.";
+                const fileCID = token.metadata?.fileCID || token.metadataCID;
+                const sha256 = token.metadata?.sha256;
+                const isEncrypted = token.metadata?.isEncrypted;
+                const categoryName = token.metadata?.categoryName || "General IP";
+                const licenseName = token.metadata?.licensing?.licenseName || "All Rights Reserved";
+                const royaltyShare = token.metadata?.licensing?.royaltyPercent;
 
-                          {token.metadata?.licensing?.licenseName && (
-                            <div className="record-card__license-tag">
-                              <span>⚖️ {token.metadata.licensing.licenseName}</span>
-                              {token.metadata.licensing.royaltyPercent > 0 && (
-                                <span className="royalty-subtag"> · {token.metadata.licensing.royaltyPercent}% Royalty</span>
-                              )}
-                            </div>
-                          )}
-
-                          {sha256 && (
-                            <div className="record-card__hash-row">
-                              <span className="hash-label">SHA-256:</span>
-                              <code className="hash-val" title={`0x${sha256}`}>
-                                0x{sha256.slice(0, 10)}…{sha256.slice(-8)}
-                              </code>
-                            </div>
-                          )}
-
-                          <div className="record-card__cid-label">IPFS CID</div>
-                          <a
-                            className="record-card__cid"
-                            href={`https://gateway.pinata.cloud/ipfs/${fileCID}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                          >
-                            {fileCID}
-                          </a>
-                        </div>
-                      </div>
-                      <button
-                        className="record-card__archive-btn"
-                        onClick={() =>
-                          showArchived
-                            ? handleUnarchive(token.tokenId)
-                            : handleArchive(token.tokenId)
-                        }
-                        title={showArchived ? "Restore NFT" : "Archive NFT"}
-                      >
-                        {showArchived ? "♻️" : "🗑️"}
-                      </button>
+                return (
+                  <div className="record-bento-card" key={token.tokenId}>
+                    <div className="bento-card-top">
+                      <span className="token-id-badge">Token #{token.tokenId}</span>
+                      <span className="table-category-pill">{categoryName}</span>
                     </div>
 
-                    <div className="record-card__bottom">
-                      <div className="record-card__nft-badge">
-                        🏷️ ERC-721 · Token #{token.tokenId}
+                    <h4 className="bento-card-title">{name}</h4>
+                    <p className="bento-card-desc">{desc}</p>
+
+                    {sha256 && (
+                      <div className="bento-card-hash">
+                        <Fingerprint size={13} className="text-emerald" />
+                        <code>0x{sha256.slice(0, 10)}…{sha256.slice(-8)}</code>
                       </div>
-                      <div className="record-card__actions">
+                    )}
+
+                    <div className="bento-card-licensing">
+                      <Scale size={13} />
+                      <span>{licenseName} {royaltyShare > 0 ? `(${royaltyShare}% Royalty)` : ""}</span>
+                    </div>
+
+                    <div className="bento-card-footer">
+                      <div className="bento-card-status">
+                        {isEncrypted ? (
+                          <span className="status-chip status-chip--encrypted">
+                            <Lock size={11} /> Zero-Knowledge
+                          </span>
+                        ) : (
+                          <span className="status-chip status-chip--public">
+                            Public
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="bento-card-actions">
                         <button
-                          className="record-card__action-btn record-card__action-btn--download"
-                          onClick={() => handleDownloadAsset(token)}
-                          title="Safe in-memory download (bypasses gateway blocker)"
-                        >
-                          ⬇️ Download
-                        </button>
-                        <a
-                          className="record-card__action-btn record-card__action-btn--ipfs"
-                          href={`https://gateway.pinata.cloud/ipfs/${fileCID}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                        >
-                          🌐 IPFS
-                        </a>
-                        <button
-                          className="record-card__action-btn record-card__action-btn--transfer"
-                          onClick={() => handleTransfer(token.tokenId)}
-                          title="Transfer NFT to another wallet"
-                        >
-                          📤 Transfer
-                        </button>
-                        <button
-                          className="record-card__action-btn record-card__action-btn--cert"
+                          className="action-icon-btn action-icon-btn--cert"
                           onClick={() => setSelectedCertToken(token)}
-                          title="View official Notarization Certificate"
+                          title="Official Notarization Certificate"
                         >
-                          📜 Certificate
+                          <FileText size={14} />
                         </button>
                         <button
-                          className={`record-card__action-btn record-card__action-btn--key ${isCopied ? "record-card__action-btn--key-copied" : ""}`}
+                          className="action-icon-btn"
                           onClick={() => handleGenerateKey(token.tokenId)}
-                          id={`btn-key-${token.tokenId}`}
-                          title="Generate & copy cryptographic access key"
+                          title="Generate Access Key"
                         >
-                          {isCopied ? "✓ Copied!" : "🔑 Key"}
+                          {copiedIndex === token.tokenId ? <Check size={14} className="text-emerald" /> : <Key size={14} />}
                         </button>
+                        <button
+                          className="action-icon-btn"
+                          onClick={() => handleSafeDownload(fileCID, name)}
+                          title="Download Asset"
+                        >
+                          <Download size={14} />
+                        </button>
+                        {showArchived ? (
+                          <button
+                            className="action-icon-btn"
+                            onClick={() => handleUnarchive(token.tokenId)}
+                            title="Restore"
+                          >
+                            <RefreshCw size={14} />
+                          </button>
+                        ) : (
+                          <button
+                            className="action-icon-btn action-icon-btn--archive"
+                            onClick={() => handleArchive(token.tokenId)}
+                            title="Archive"
+                          >
+                            <Archive size={14} />
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>
-                </div>
-              );
-            })
+                );
+              })}
+            </div>
           )}
         </div>
 
-        {/* Certificate Modal */}
+        {/* Official Certificate Modal */}
         {selectedCertToken && (
           <CertificateModal
             token={selectedCertToken}

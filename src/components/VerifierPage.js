@@ -1,4 +1,17 @@
 import React, { useState } from "react";
+import {
+  Fingerprint,
+  ShieldCheck,
+  Search,
+  ArrowLeft,
+  AlertTriangle,
+  UploadCloud,
+  CheckCircle2,
+  XCircle,
+  FileText,
+  ExternalLink,
+  RotateCcw
+} from "lucide-react";
 import { computeSHA256 } from "../utils/crypto";
 import { getReadOnlyContract, CONTRACT_ADDRESS } from "../utils/contract";
 import { fetchIPFSJSON } from "../utils/ipfs";
@@ -105,7 +118,7 @@ function VerifierPage({ onBack, onToast, onSelectCreator }) {
           computedHash: cleanTargetHash || matchedRecord.metadata?.sha256,
           token: matchedRecord,
         });
-        onToast("✅ Cryptographic match verified on Ethereum!", "success");
+        onToast("Cryptographic match verified on Ethereum Sepolia!", "success");
       } else {
         setVerificationResult({
           matchFound: false,
@@ -129,7 +142,7 @@ function VerifierPage({ onBack, onToast, onSelectCreator }) {
 
     setSelectedFile(file);
     setIsVerifying(true);
-    setStatusMessage("Computing zero-knowledge SHA-256 hash in browser…");
+    setStatusMessage("Computing hardware SHA-256 hash in browser memory…");
 
     try {
       const { hex } = await computeSHA256(file);
@@ -153,7 +166,7 @@ function VerifierPage({ onBack, onToast, onSelectCreator }) {
       return;
     }
 
-    // Treat as SHA-256 Hash
+    // Treat as SHA-256 Hash or CID
     await verifyAgainstBlockchain(query);
   };
 
@@ -161,40 +174,49 @@ function VerifierPage({ onBack, onToast, onSelectCreator }) {
 
   return (
     <div className="verifier">
-      {/* Background Orbs */}
-      <div className="verifier__orb verifier__orb--1" />
-      <div className="verifier__orb verifier__orb--2" />
+      <div className="verifier__grid-bg" />
 
       {/* Top Bar */}
       <div className="verifier__topbar">
-        <button className="back-button" onClick={onBack}>
-          <span className="arrow">←</span> Back to Home
-        </button>
-        <div className="verifier__topbar-brand">
-          <span className="brand-icon">🛡️</span>
-          <span className="brand-name">IP Vault Verifier</span>
+        <div className="verifier__topbar-left">
+          <button className="back-button" onClick={onBack}>
+            <ArrowLeft size={15} />
+            <span>Home</span>
+          </button>
+          <div className="verifier__brand">
+            <Fingerprint size={18} className="brand-icon" />
+            <span className="brand-name">IP VAULT</span>
+            <span className="brand-sub">FORENSIC VERIFIER</span>
+          </div>
         </div>
+        {onSelectCreator && (
+          <button className="nav-action-btn" onClick={onSelectCreator}>
+            <ShieldCheck size={14} />
+            <span>Notarize IP</span>
+          </button>
+        )}
       </div>
 
       {/* Hero Section */}
       <div className="verifier__hero">
         <div className="verifier__badge">
-          <span>⚡</span>
-          <span>Zero-Knowledge Prior Art Registry</span>
+          <Fingerprint size={14} className="text-emerald" />
+          <span>FIPS 180-4 Hardware SHA-256 · Wallet-Free Prior Art Verification</span>
         </div>
-        <h1 className="verifier__title">Verify Document Authenticity</h1>
+        <h1 className="verifier__title">Cryptographic Prior Art & Tamper Verifier</h1>
         <p className="verifier__desc">
-          Drag & drop any document or file to calculate its SHA-256 cryptographic digest in-browser
-          and mathematically prove its registration, date of creation, and author attribution on Ethereum.
+          Drag & drop any document or file to calculate its 256-bit cryptographic digest locally in RAM
+          and mathematically prove its historical existence, author attribution, and tamper integrity on Ethereum Sepolia.
         </p>
         <div className="verifier__contract-ref">
-          Sepolia Registry:{" "}
+          Sepolia Consensus Registry:{" "}
           <a
             href={`https://sepolia.etherscan.io/address/${CONTRACT_ADDRESS}`}
             target="_blank"
             rel="noopener noreferrer"
           >
-            {CONTRACT_ADDRESS.slice(0, 8)}···{CONTRACT_ADDRESS.slice(-6)} ↗
+            <code>{CONTRACT_ADDRESS}</code>
+            <ExternalLink size={12} />
           </a>
         </div>
       </div>
@@ -208,7 +230,8 @@ function VerifierPage({ onBack, onToast, onSelectCreator }) {
             setVerificationResult(null);
           }}
         >
-          📁 Drag & Drop File
+          <UploadCloud size={15} />
+          <span>Drag & Drop File Verification</span>
         </button>
         <button
           className={`verifier__tab ${activeTab === "manual" ? "active" : ""}`}
@@ -217,7 +240,8 @@ function VerifierPage({ onBack, onToast, onSelectCreator }) {
             setVerificationResult(null);
           }}
         >
-          🔍 Search Hash / Token ID
+          <Search size={15} />
+          <span>Search by SHA-256 Checksum / Token ID</span>
         </button>
       </div>
 
@@ -253,23 +277,23 @@ function VerifierPage({ onBack, onToast, onSelectCreator }) {
             {isVerifying ? (
               <div className="verifier__spinner-wrap">
                 <span className="btn-spinner" style={{ width: 36, height: 36, borderWidth: 3 }} />
-                <span className="verifier__dropzone-title">{statusMessage || "Verifying on blockchain…"}</span>
-                <span className="verifier__dropzone-sub">Hardware-accelerated zero-knowledge execution</span>
+                <span className="verifier__dropzone-title">{statusMessage || "Scanning Sepolia registry…"}</span>
+                <span className="verifier__dropzone-sub">Hardware-accelerated zero-knowledge execution in RAM</span>
               </div>
             ) : selectedFile ? (
               <div className="verifier__dropzone-selected">
-                <span className="verifier__dropzone-icon">📄</span>
+                <Fingerprint size={36} className="text-emerald" />
                 <span className="verifier__dropzone-title">{selectedFile.name}</span>
                 <span className="verifier__dropzone-sub">
-                  {(selectedFile.size / 1024).toFixed(1)} KB · Click or drop another file to re-test
+                  {(selectedFile.size / 1024).toFixed(1)} KB · Click or drop another file to test
                 </span>
               </div>
             ) : (
               <div className="verifier__dropzone-empty">
-                <span className="verifier__dropzone-icon">📥</span>
-                <span className="verifier__dropzone-title">Drop your file here to verify</span>
+                <UploadCloud size={40} className="dropzone-empty-icon" />
+                <span className="verifier__dropzone-title">Drop your file here to verify authenticity</span>
                 <span className="verifier__dropzone-sub">
-                  PDFs, Office Docs, Source Code, CAD, Audio, Images (Processed 100% locally)
+                  PDFs, Office Docs, Source Code, CAD, Audio, Images (Processed 100% locally in browser memory)
                 </span>
               </div>
             )}
@@ -281,14 +305,14 @@ function VerifierPage({ onBack, onToast, onSelectCreator }) {
       {activeTab === "manual" && (
         <div className="verifier__manual-card">
           <label className="verifier__manual-label" htmlFor="manual-search-input">
-            Enter SHA-256 Hash or Token ID
+            Enter 64-Character SHA-256 Checksum or Token ID
           </label>
           <div className="verifier__manual-row">
             <input
               type="text"
               id="manual-search-input"
               className="verifier__manual-input"
-              placeholder="e.g. 0x5cb744cbd4... or Token #2"
+              placeholder="e.g. 0x7f83b165... or Token #2"
               value={manualInput}
               onChange={(e) => setManualInput(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleManualSearch()}
@@ -299,11 +323,12 @@ function VerifierPage({ onBack, onToast, onSelectCreator }) {
               onClick={handleManualSearch}
               disabled={isVerifying || !manualInput.trim()}
             >
-              {isVerifying ? "Scanning…" : "Verify"}
+              <Search size={15} />
+              <span>{isVerifying ? "Scanning…" : "Verify"}</span>
             </button>
           </div>
           <span className="verifier__manual-hint">
-            Tip: You can paste the 64-character SHA-256 hex or a token number like <code>#2</code>.
+            Tip: You can query by token index (e.g. <code>#2</code>), 256-bit SHA-256 digest, or decentralized IPFS CID.
           </span>
         </div>
       )}
@@ -312,17 +337,20 @@ function VerifierPage({ onBack, onToast, onSelectCreator }) {
       {verificationResult && (
         <div className="verifier__result-wrap">
           {verificationResult.matchFound ? (
-            /* 🟢 Match Found Card */
+            /* 🟢 Authentic Match Card */
             <div className="v-card v-card--verified">
               <div className="v-card__header">
-                <div className="v-card__seal">🛡️</div>
+                <div className="v-card__seal">
+                  <ShieldCheck size={32} />
+                </div>
                 <div className="v-card__title-wrap">
                   <span className="v-card__pill v-card__pill--success">
-                    ✓ 100% BITWISE AUTHENTIC & UNTAMPERED
+                    <CheckCircle2 size={13} />
+                    <span>100% BITWISE AUTHENTIC & UNTAMPERED</span>
                   </span>
                   <h2 className="v-card__title">Proof of Prior Art Confirmed</h2>
                   <p className="v-card__desc">
-                    This file matches an immutable cryptographic record anchored on the Ethereum Sepolia blockchain.
+                    This asset matches an immutable cryptographic record anchored on the Ethereum Sepolia blockchain.
                   </p>
                 </div>
               </div>
@@ -356,7 +384,7 @@ function VerifierPage({ onBack, onToast, onSelectCreator }) {
                   <span className="v-card__value">
                     {verificationResult.token.metadata?.createdAt
                       ? new Date(verificationResult.token.metadata.createdAt).toUTCString()
-                      : "Verified On-Chain"}
+                      : "Verified On-Chain Consensus"}
                   </span>
                 </div>
 
@@ -364,8 +392,8 @@ function VerifierPage({ onBack, onToast, onSelectCreator }) {
                   <span className="v-card__label">Confidentiality Status</span>
                   <span className="v-card__value">
                     {verificationResult.token.metadata?.isEncrypted
-                      ? "🔒 Zero-Knowledge Encrypted (AES-256)"
-                      : "🌐 Public Prior Art Publication"}
+                      ? "Zero-Knowledge Encrypted (AES-256-GCM)"
+                      : "Public Prior Art Publication"}
                   </span>
                 </div>
 
@@ -404,7 +432,8 @@ function VerifierPage({ onBack, onToast, onSelectCreator }) {
                     target="_blank"
                     rel="noopener noreferrer"
                   >
-                    {verificationResult.token.metadata?.fileCID || verificationResult.token.metadataCID} ↗
+                    <span>{verificationResult.token.metadata?.fileCID || verificationResult.token.metadataCID}</span>
+                    <ExternalLink size={13} />
                   </a>
                 </div>
               </div>
@@ -414,7 +443,8 @@ function VerifierPage({ onBack, onToast, onSelectCreator }) {
                   className="cert-btn cert-btn--primary"
                   onClick={() => setSelectedCertToken(verificationResult.token)}
                 >
-                  📜 View Official Notarization Certificate
+                  <FileText size={16} />
+                  <span>View Official Notarization Certificate</span>
                 </button>
               </div>
             </div>
@@ -422,10 +452,13 @@ function VerifierPage({ onBack, onToast, onSelectCreator }) {
             /* 🔴 No Match Found Card */
             <div className="v-card v-card--unverified">
               <div className="v-card__header">
-                <div className="v-card__seal v-card__seal--danger">⚠️</div>
+                <div className="v-card__seal v-card__seal--danger">
+                  <AlertTriangle size={32} />
+                </div>
                 <div className="v-card__title-wrap">
                   <span className="v-card__pill v-card__pill--danger">
-                    ✕ NO MATCH FOUND IN REGISTRY
+                    <XCircle size={13} />
+                    <span>NO MATCH FOUND IN REGISTRY</span>
                   </span>
                   <h2 className="v-card__title">Unregistered or Modified Content</h2>
                   <p className="v-card__desc">
@@ -439,7 +472,7 @@ function VerifierPage({ onBack, onToast, onSelectCreator }) {
               <div className="v-card__grid">
                 {verificationResult.computedHash && (
                   <div className="v-card__field v-card__field--full">
-                    <span className="v-card__label">Computed SHA-256 Digest of File</span>
+                    <span className="v-card__label">Computed SHA-256 Digest of Tested File</span>
                     <code className="v-card__hash v-card__hash--unverified">
                       0x{verificationResult.computedHash}
                     </code>
@@ -447,13 +480,13 @@ function VerifierPage({ onBack, onToast, onSelectCreator }) {
                 )}
 
                 <div className="v-card__notice">
-                  <strong>Why did this happen?</strong>
+                  <strong>Forensic Analysis & Common Causes:</strong>
                   <ul className="v-card__notice-list">
-                    <li>This document has not yet been notarized on the Ethereum Sepolia registry.</li>
+                    <li>This asset has not yet been notarized on the Ethereum Sepolia consensus registry.</li>
                     <li>
-                      <strong>File Tampering:</strong> Even modifying a single byte, comma, space, or metadata attribute changes the SHA-256 hash completely.
+                      <strong>File Tampering:</strong> Even modifying a single space, character, comma, or metadata tag changes the 256-bit hash completely.
                     </li>
-                    <li>If this file was modified after registration, it is no longer identical to the original prior art.</li>
+                    <li>If this document was revised after creation, it is no longer identical to the original prior art.</li>
                   </ul>
                 </div>
               </div>
@@ -461,7 +494,8 @@ function VerifierPage({ onBack, onToast, onSelectCreator }) {
               <div className="v-card__actions">
                 {onSelectCreator && (
                   <button className="cert-btn cert-btn--primary" onClick={onSelectCreator}>
-                    🎨 Protect & Notarize This File Now
+                    <ShieldCheck size={16} />
+                    <span>Protect & Notarize This File Now</span>
                   </button>
                 )}
                 <button
@@ -472,7 +506,8 @@ function VerifierPage({ onBack, onToast, onSelectCreator }) {
                     setManualInput("");
                   }}
                 >
-                  Test Another File
+                  <RotateCcw size={15} />
+                  <span>Test Another File</span>
                 </button>
               </div>
             </div>

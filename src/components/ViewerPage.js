@@ -1,4 +1,19 @@
 import React, { useState, useEffect, useMemo } from "react";
+import {
+  KeyRound,
+  Lock,
+  Unlock,
+  ShieldCheck,
+  FileText,
+  Download,
+  ExternalLink,
+  Music,
+  Copy,
+  Check,
+  Search,
+  ArrowLeft,
+  AlertCircle
+} from "lucide-react";
 import { decodeAccessKey } from "../utils/accessKey";
 import { getReadOnlyContract } from "../utils/contract";
 import { decryptFile } from "../utils/crypto";
@@ -14,6 +29,7 @@ function ViewerPage({ onBack, onToast, onSelectVerifier }) {
   const [result, setResult] = useState(null);
   const [unlocked, setUnlocked] = useState(false);
   const [showCertificate, setShowCertificate] = useState(false);
+  const [copiedCode, setCopiedCode] = useState(false);
 
   // Live key inspector for user feedback as they type or paste
   const keyInfo = useMemo(() => {
@@ -37,7 +53,7 @@ function ViewerPage({ onBack, onToast, onSelectVerifier }) {
 
   const handleSubmit = async () => {
     if (!accessKey.trim()) {
-      setError("Please enter an access key");
+      setError("Please enter a cryptographic access key");
       return;
     }
 
@@ -73,7 +89,7 @@ function ViewerPage({ onBack, onToast, onSelectVerifier }) {
       const fileCID = metadata?.fileCID || metadataCID;
       const sha256 = metadata?.sha256 || decodedKey.sha256Hex;
       const name = metadata?.name || decodedKey.name || `Asset #${decodedKey.tokenId}`;
-      const description = metadata?.description || "No description provided";
+      const description = metadata?.description || "No formal description provided";
 
       // Detect / infer MIME type
       let resolvedMime = metadata?.mimeType;
@@ -103,11 +119,11 @@ function ViewerPage({ onBack, onToast, onSelectVerifier }) {
       if (isAssetEncrypted) {
         if (!decodedKey.isEncrypted || !decodedKey.keyBase64 || !decodedKey.ivBase64) {
           throw new Error(
-            "🔒 Confidential IP: This NFT is encrypted with AES-256-GCM. The access key entered lacks decryption credentials. Please request a cryptographic access key from the author."
+            "Confidential IP: This asset is encrypted with AES-256-GCM. The key provided lacks decryption credentials. Please request a full cryptographic access key from the author."
           );
         }
 
-        setStatusText("Fetching encrypted ciphertext from IPFS…");
+        setStatusText("Fetching encrypted ciphertext from decentralized IPFS…");
         const encryptedBlob = await fetchIPFSBlob(fileCID);
 
         setStatusText("Decrypting in-memory with Web Crypto AES-256-GCM…");
@@ -181,6 +197,8 @@ function ViewerPage({ onBack, onToast, onSelectVerifier }) {
         sha256,
         mimeType: resolvedMime,
         fileSize: metadata?.fileSize,
+        categoryName: metadata?.categoryName || "General IP",
+        licensing: metadata?.licensing,
         displayUrl,
         textPreview,
         rawKey: accessKey.trim(),
@@ -189,8 +207,8 @@ function ViewerPage({ onBack, onToast, onSelectVerifier }) {
       setUnlocked(true);
       onToast(
         isAssetEncrypted
-          ? "🎉 Decrypted & Verified with Zero-Knowledge Proof!"
-          : "✅ Prior Art Record Retrieved Successfully!",
+          ? "Decrypted in-memory with Zero-Knowledge proof!"
+          : "Prior art record retrieved successfully!",
         "success"
       );
     } catch (err) {
@@ -202,7 +220,7 @@ function ViewerPage({ onBack, onToast, onSelectVerifier }) {
     }
   };
 
-  const truncateAddress = (addr) => (addr ? `${addr.slice(0, 6)}…${addr.slice(-4)}` : "N/A");
+  const truncateAddress = (addr) => (addr ? `${addr.slice(0, 6)}···${addr.slice(-4)}` : "N/A");
 
   const handlePasteKey = async () => {
     try {
@@ -219,47 +237,46 @@ function ViewerPage({ onBack, onToast, onSelectVerifier }) {
 
   return (
     <div className="viewer">
-      {/* Ambient Orbs */}
-      <div className="viewer__orb viewer__orb--1" />
-      <div className="viewer__orb viewer__orb--2" />
+      <div className="viewer__grid-bg" />
 
       {/* Top Bar */}
       <div className="viewer__topbar">
-        <button className="back-button" onClick={onBack}>
-          <span className="arrow">←</span> Back
-        </button>
-        <div className="viewer__topbar-brand">
-          <span>🛡️</span>
-          <span className="viewer__brand-name">IP Vault Viewer</span>
+        <div className="viewer__topbar-left">
+          <button className="back-button" onClick={onBack}>
+            <ArrowLeft size={15} />
+            <span>Home</span>
+          </button>
+          <div className="viewer__topbar-brand">
+            <Lock size={18} className="brand-icon" />
+            <span className="viewer__brand-name">IP VAULT</span>
+            <span className="brand-sub">SECURE DATA ROOM</span>
+          </div>
         </div>
         {onSelectVerifier && (
-          <button
-            className="nav-action-btn"
-            onClick={onSelectVerifier}
-            title="Open Public Prior Art Verifier"
-            style={{ marginLeft: "auto" }}
-          >
-            <span>🔍</span> Public Verifier
+          <button className="nav-action-btn" onClick={onSelectVerifier} title="Open Public Prior Art Verifier">
+            <Search size={14} />
+            <span>Public Verifier</span>
           </button>
         )}
       </div>
 
       {/* Hero Section */}
       <div className="viewer__hero">
-        <div className={`viewer__lock-icon ${unlocked ? "viewer__lock-icon--open" : ""}`}>
-          {unlocked ? "🔓" : "🔑"}
+        <div className="viewer__badge">
+          <KeyRound size={14} className="text-emerald" />
+          <span>Web Crypto AES-256-GCM In-Memory Decryption Enclave</span>
         </div>
         <h1 className="viewer__title">
-          {unlocked ? "Content Unlocked & Verified!" : "Access Protected Content"}
+          {unlocked ? "Protected Asset Unlocked & Verified" : "Access Protected Intellectual Property"}
         </h1>
         <p className="viewer__desc">
           {unlocked
-            ? "Your asset has been authenticated on-chain and restored in private browser memory."
-            : "Enter a cryptographic access key to verify on-chain provenance and decrypt protected IP assets."}
+            ? "Your asset has been authenticated against Ethereum Sepolia on-chain consensus and restored directly in private browser memory."
+            : "Enter a cryptographic access key to verify on-chain provenance and decrypt protected IP assets with zero-knowledge hardware execution."}
         </p>
       </div>
 
-      {/* Input Area */}
+      {/* Input Card */}
       {!result && (
         <div className="viewer__input-group">
           <div className="viewer__input-card">
@@ -273,13 +290,14 @@ function ViewerPage({ onBack, onToast, onSelectVerifier }) {
                 onClick={handlePasteKey}
                 title="Paste from clipboard"
               >
-                📋 Paste Key
+                <Copy size={13} />
+                <span>Paste Key</span>
               </button>
             </div>
 
             <div className="viewer__input-row">
               <div className="viewer__input-wrapper">
-                <span className="viewer__input-prefix">🔑</span>
+                <KeyRound size={16} className="input-prefix-icon" />
                 <input
                   type="text"
                   className="viewer__input"
@@ -306,7 +324,10 @@ function ViewerPage({ onBack, onToast, onSelectVerifier }) {
                     <span>Verifying…</span>
                   </>
                 ) : (
-                  <>Unlock <span className="viewer__btn-arrow">→</span></>
+                  <>
+                    <Unlock size={16} />
+                    <span>Unlock Asset</span>
+                  </>
                 )}
               </button>
             </div>
@@ -319,11 +340,11 @@ function ViewerPage({ onBack, onToast, onSelectVerifier }) {
                 </span>
                 {keyInfo.isEncrypted ? (
                   <span className="key-chip key-chip--encrypted">
-                    🔒 AES-256-GCM Key Attached
+                    <Lock size={11} /> AES-256-GCM Key Attached
                   </span>
                 ) : (
                   <span className="key-chip key-chip--public">
-                    🌐 Public Token Access
+                    Public Token Access
                   </span>
                 )}
                 {keyInfo.sha256Hex && (
@@ -346,7 +367,7 @@ function ViewerPage({ onBack, onToast, onSelectVerifier }) {
 
             {error && (
               <div className="viewer__error">
-                <span>⚠️</span>
+                <AlertCircle size={16} />
                 <span>{error}</span>
               </div>
             )}
@@ -362,7 +383,7 @@ function ViewerPage({ onBack, onToast, onSelectVerifier }) {
       {result && (
         <div className="viewer__result">
           <div className="viewer__result-card">
-            {/* Verified badge */}
+            {/* Header Badge */}
             <div className="viewer__verified-badge">
               <span className="viewer__verified-dot" />
               <span>Verified On-Chain NFT · Token #{result.tokenId}</span>
@@ -371,11 +392,13 @@ function ViewerPage({ onBack, onToast, onSelectVerifier }) {
             {/* Integrity Barometer */}
             {result.isEncrypted ? (
               <div className="viewer__integrity-card">
-                <div className="integrity-icon">🛡️</div>
+                <div className="integrity-icon">
+                  <ShieldCheck size={28} />
+                </div>
                 <div className="integrity-content">
                   <div className="integrity-badge-row">
                     <span className="integrity-status-pill">
-                      ✓ ZERO-KNOWLEDGE DECRYPTION COMPLETE
+                      ZERO-KNOWLEDGE DECRYPTION COMPLETE
                     </span>
                     {result.verifiedIntegrity && (
                       <span className="integrity-match-pill">
@@ -383,10 +406,10 @@ function ViewerPage({ onBack, onToast, onSelectVerifier }) {
                       </span>
                     )}
                   </div>
-                  <h3 className="integrity-heading">In-Memory Hardware AES-256-GCM Decryption</h3>
+                  <h3 className="integrity-heading">In-Memory Web Crypto AES-256-GCM Sandbox</h3>
                   <p className="integrity-subtext">
-                    Ciphertext was fetched from decentralized IPFS, verified against on-chain Ethereum records,
-                    and decrypted strictly in private browser memory. Plaintext was never exposed to any server.
+                    Ciphertext was retrieved from decentralized IPFS, authenticated against on-chain Ethereum consensus,
+                    and decrypted strictly in private volatile memory. Plaintext was never exposed over the network.
                   </p>
                   {result.sha256 && (
                     <div className="integrity-digest">
@@ -398,17 +421,19 @@ function ViewerPage({ onBack, onToast, onSelectVerifier }) {
               </div>
             ) : (
               <div className="viewer__integrity-card viewer__integrity-card--public">
-                <div className="integrity-icon">🌐</div>
+                <div className="integrity-icon">
+                  <ShieldCheck size={28} />
+                </div>
                 <div className="integrity-content">
                   <div className="integrity-badge-row">
                     <span className="integrity-status-pill integrity-status-pill--public">
-                      ✓ PUBLIC PRIOR ART RECORD
+                      PUBLIC PRIOR ART RECORD
                     </span>
                   </div>
                   <h3 className="integrity-heading">Immutable On-Chain Attestation</h3>
                   <p className="integrity-subtext">
                     This intellectual property record is permanently anchored to the Ethereum Sepolia registry
-                    for open prior art defense and legal timestamping.
+                    for open prior art defense, academic citation, and legal timestamping.
                   </p>
                   {result.sha256 && (
                     <div className="integrity-digest">
@@ -451,7 +476,8 @@ function ViewerPage({ onBack, onToast, onSelectVerifier }) {
                   target="_blank"
                   rel="noopener noreferrer"
                 >
-                  {result.fileCID} ↗
+                  <span>{result.fileCID}</span>
+                  <ExternalLink size={12} />
                 </a>
               </div>
             </div>
@@ -461,7 +487,7 @@ function ViewerPage({ onBack, onToast, onSelectVerifier }) {
               <div className="viewer__preview-container">
                 <div className="viewer__preview-header">
                   <span className="viewer__preview-header-title">
-                    🔍 Live In-Browser Decryption Preview
+                    Decrypted Asset Preview
                   </span>
                   <span className="viewer__preview-header-badge">
                     {result.mimeType}
@@ -472,14 +498,15 @@ function ViewerPage({ onBack, onToast, onSelectVerifier }) {
                 {(result.mimeType === "application/pdf" || result.name.toLowerCase().endsWith(".pdf")) ? (
                   <div className="viewer__preview-pdf-wrap">
                     <div className="viewer__preview-pdf-bar">
-                      <span>📄 Embedded PDF Viewer</span>
+                      <span>Embedded PDF Document Viewer</span>
                       <a
                         href={result.displayUrl}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="viewer__preview-pill-link"
                       >
-                        ↗ Open in New Window
+                        <span>Open in Tab</span>
+                        <ExternalLink size={12} />
                       </a>
                     </div>
                     <iframe
@@ -500,7 +527,7 @@ function ViewerPage({ onBack, onToast, onSelectVerifier }) {
                 ) : result.mimeType.startsWith("audio/") ? (
                   /* Audio Player */
                   <div className="viewer__preview-audio-wrap">
-                    <div className="viewer__preview-audio-icon">🎵</div>
+                    <Music size={24} className="text-emerald" />
                     <audio controls src={result.displayUrl} style={{ width: "100%" }} />
                   </div>
                 ) : result.mimeType.startsWith("video/") ? (
@@ -512,16 +539,19 @@ function ViewerPage({ onBack, onToast, onSelectVerifier }) {
                   /* Code / Text Viewer */
                   <div className="viewer__preview-text-wrap">
                     <div className="viewer__preview-text-bar">
-                      <span>📄 Source Code / Text File</span>
+                      <span>Source Code / Text Stream</span>
                       <button
                         type="button"
                         className="viewer__preview-pill-link"
                         onClick={() => {
                           navigator.clipboard.writeText(result.textPreview);
-                          onToast("Copied code to clipboard!", "success");
+                          setCopiedCode(true);
+                          setTimeout(() => setCopiedCode(false), 2000);
+                          onToast("Copied code to clipboard", "success");
                         }}
                       >
-                        📋 Copy Content
+                        {copiedCode ? <Check size={12} className="text-emerald" /> : <Copy size={12} />}
+                        <span>{copiedCode ? "Copied" : "Copy Content"}</span>
                       </button>
                     </div>
                     <pre className="viewer__preview-code-block">
@@ -529,9 +559,11 @@ function ViewerPage({ onBack, onToast, onSelectVerifier }) {
                     </pre>
                   </div>
                 ) : (
-                  /* Word / Office / Other Document Card */
+                  /* Office Document / Binary Card */
                   <div className="viewer__preview-doc-card">
-                    <div className="viewer__preview-doc-icon">📑</div>
+                    <div className="viewer__preview-doc-icon">
+                      <FileText size={32} />
+                    </div>
                     <div className="viewer__preview-doc-info">
                       <div className="viewer__preview-doc-title">{result.name}</div>
                       <div className="viewer__preview-doc-desc">
@@ -546,7 +578,8 @@ function ViewerPage({ onBack, onToast, onSelectVerifier }) {
                       download={result.name}
                       className="viewer__preview-doc-btn"
                     >
-                      ⬇️ Download File
+                      <Download size={14} />
+                      <span>Download File</span>
                     </a>
                   </div>
                 )}
@@ -557,45 +590,49 @@ function ViewerPage({ onBack, onToast, onSelectVerifier }) {
             <div className="viewer__result-actions">
               {result.displayUrl ? (
                 <a
-                  className="lp-btn lp-btn--primary"
+                  className="v-action-btn v-action-btn--primary"
                   href={result.displayUrl}
                   download={result.name}
                   id="btn-download-decrypted"
                 >
-                  ⬇️ Download Verified Asset
+                  <Download size={15} />
+                  <span>Download Verified Asset</span>
                 </a>
               ) : (
                 <a
-                  className="lp-btn lp-btn--primary"
+                  className="v-action-btn v-action-btn--primary"
                   href={`https://gateway.pinata.cloud/ipfs/${result.fileCID}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   id="btn-view-content"
                 >
-                  🌐 View on IPFS Gateway
+                  <ExternalLink size={15} />
+                  <span>View on IPFS Gateway</span>
                 </a>
               )}
 
               <button
-                className="viewer__cert-btn"
+                className="v-action-btn v-action-btn--outline"
                 onClick={() => setShowCertificate(true)}
                 title="View Bernstein-Standard Cryptographic Notarization Certificate"
               >
-                📜 Proof Certificate
+                <FileText size={15} />
+                <span>Proof Certificate</span>
               </button>
 
               {onSelectVerifier && (
                 <button
-                  className="viewer__verify-btn"
+                  className="v-action-btn v-action-btn--outline"
                   onClick={onSelectVerifier}
                   title="Verify Document in Public Registry"
                 >
-                  🔍 Verify in Prior Art Registry
+                  <Search size={15} />
+                  <span>Verify in Prior Art Registry</span>
                 </button>
               )}
 
               <button
-                className="viewer__reset-btn"
+                className="v-action-btn v-action-btn--ghost"
                 onClick={() => {
                   setResult(null);
                   setAccessKey("");
