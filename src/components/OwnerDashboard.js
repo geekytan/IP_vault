@@ -2,7 +2,9 @@ import React, { useState, useEffect, useCallback } from "react";
 import { ethers } from "ethers";
 import WalletConnect from "./WalletConnect";
 import { getContract } from "../utils/contract";
-import { generateAccessKey } from "../utils/accessKey";
+import { generateAccessKey, saveLocalAssetKey, getLocalAssetKey } from "../utils/accessKey";
+import { computeSHA256, encryptFile } from "../utils/crypto";
+import { fetchIPFSJSON } from "../utils/ipfs";
 import "./OwnerDashboard.css";
 
 function OwnerDashboard({ onBack, onToast }) {
@@ -15,14 +17,15 @@ function OwnerDashboard({ onBack, onToast }) {
   const [isMinting, setIsMinting] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [selectedFile, setSelectedFile] = useState(null);
+  const [fileHash, setFileHash] = useState("");
+  const [isEncryptedMode, setIsEncryptedMode] = useState(true);
+  const [stagedEncryptionKeys, setStagedEncryptionKeys] = useState(null);
   const [copiedIndex, setCopiedIndex] = useState(null);
   const [showArchived, setShowArchived] = useState(false);
   const [archivedIds, setArchivedIds] = useState(() => {
     const saved = localStorage.getItem("archived_tokens");
     return saved ? JSON.parse(saved) : [];
   });
-
-  // Derive mint step
 
   useEffect(() => {
     localStorage.setItem("archived_tokens", JSON.stringify(archivedIds));
@@ -40,18 +43,58 @@ function OwnerDashboard({ onBack, onToast }) {
     onToast("NFT restored to Active", "success");
   };
 
-  // ---- Pinata IPFS Upload ----
-  const handleFileUpload = async (e) => {
+  // ---- Handle File Selection & Immediate SHA-256 Fingerprint ----
+  const handleFileChange = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
     setSelectedFile(file);
-    setIsUploading(true);
-    onToast("Uploading file to IPFS via Pinata…", "info");
+    setCid("");
+    setStagedEncryptionKeys(null);
 
     try {
+      // Calculate cryptographic SHA-256 fingerprint in-browser
+      onToast("Computing zero-knowledge SHA-256 digest…", "info");
+      const { hex } = await computeSHA256(file);
+      setFileHash(hex);
+      onToast("Fingerprint computed! Ready to encrypt & upload.", "success");
+    } catch (err) {
+      console.error("Hash calculation error:", err);
+      onToast("Failed to compute file fingerprint", "error");
+    }
+  };
+
+  // ---- Encrypt & Upload to IPFS ----
+  const handleUploadToIPFS = async () => {
+    if (!selectedFile) return;
+
+    setIsUploading(true);
+    try {
+      let uploadFile;
+
+      if (isEncryptedMode) {
+        onToast("🔒 Encrypting file with AES-256-GCM in browser…", "info");
+        const encResult = await encryptFile(selectedFile);
+        uploadFile = new File(
+          [encResult.encryptedBlob],
+          `encrypted_${selectedFile.name}.bin`,
+          { type: "application/octet-stream" }
+        );
+
+        setStagedEncryptionKeys({
+          keyBase64: encResult.keyBase64,
+          ivBase64: encResult.ivBase64,
+          sha256Hex: encResult.sha256Hex,
+          name: selectedFile.name,
+        });
+      } else {
+        uploadFile = selectedFile;
+        setStagedEncryptionKeys(null);
+      }
+
+      onToast("Pinning payload to IPFS via Pinata…", "info");
       const formData = new FormData();
-      formData.append("file", file);
+      formData.append("file", uploadFile);
 
       const res = await fetch("https://api.pinata.cloud/pinning/pinFileToIPFS", {
         method: "POST",
@@ -64,13 +107,18 @@ function OwnerDashboard({ onBack, onToast }) {
       const resData = await res.json();
       if (resData.IpfsHash) {
         setCid(resData.IpfsHash);
-        onToast("File pinned! Add a description and mint.", "success");
+        onToast(
+          isEncryptedMode
+            ? "🛡️ Encrypted ciphertext pinned! Ready to mint."
+            : "File pinned! Ready to mint.",
+          "success"
+        );
       } else {
-        throw new Error("Upload failed");
+        throw new Error("Upload failed: No IPFS hash returned");
       }
     } catch (error) {
-      console.error("Pinata error:", error);
-      onToast("IPFS upload failed.", "error");
+      console.error("IPFS upload error:", error);
+      onToast("IPFS upload failed. Please verify Pinata credentials.", "error");
     } finally {
       setIsUploading(false);
     }
@@ -129,14 +177,14 @@ function OwnerDashboard({ onBack, onToast }) {
 
           let metadata = null;
           try {
-            const res = await fetch(`https://ipfs.io/ipfs/${metadataCID}`);
-            const data = await res.json();
-            if (data.fileCID || data.type === "IP_VAULT_METADATA_V1") {
-              metadata = data;
-            }
-          } catch (e) {}
+            metadata = await fetchIPFSJSON(metadataCID);
+          } catch (e) {
+            console.warn(`Could not fetch metadata for token #${tokenId}`, e);
+          }
 
-          return { tokenId, metadataCID, metadata };
+          const localKey = getLocalAssetKey(tokenId);
+
+          return { tokenId, metadataCID, metadata, hasLocalKey: Boolean(localKey) };
         })
       );
 
@@ -161,10 +209,16 @@ function OwnerDashboard({ onBack, onToast }) {
     setIsMinting(true);
     try {
       const metadata = {
-        fileCID: cid,
-        description: description || "No description provided",
         name: selectedFile ? selectedFile.name : "Manual Entry",
-        type: "IP_VAULT_METADATA_V1",
+        description: description || "No description provided",
+        fileCID: cid,
+        sha256: fileHash || null,
+        isEncrypted: isEncryptedMode,
+        encryptionAlgorithm: isEncryptedMode ? "AES-GCM-256" : "None",
+        fileSize: selectedFile ? selectedFile.size : null,
+        mimeType: selectedFile ? selectedFile.type : null,
+        createdAt: new Date().toISOString(),
+        type: "IP_VAULT_METADATA_V2",
       };
 
       onToast("Pinning metadata to IPFS…", "info");
@@ -182,12 +236,44 @@ function OwnerDashboard({ onBack, onToast }) {
 
       onToast("Minting NFT on blockchain…", "info");
       const tx = await contract.mintIPRecord(finalHash);
-      await tx.wait();
+      const receipt = await tx.wait();
 
-      onToast("🎉 NFT Minted Successfully!", "success");
+      // Extract minted token ID from transaction logs
+      let mintedTokenId = null;
+      if (receipt && receipt.logs) {
+        for (const log of receipt.logs) {
+          try {
+            const parsed = contract.interface.parseLog(log);
+            if (parsed && (parsed.name === "IPRecordMinted" || parsed.name === "Transfer")) {
+              mintedTokenId = Number(parsed.args.tokenId);
+              break;
+            }
+          } catch (e) {}
+        }
+      }
+
+      // Persist client-side decryption key securely in creator's browser
+      if (isEncryptedMode && stagedEncryptionKeys && mintedTokenId !== null) {
+        saveLocalAssetKey(mintedTokenId, {
+          keyBase64: stagedEncryptionKeys.keyBase64,
+          ivBase64: stagedEncryptionKeys.ivBase64,
+          sha256Hex: stagedEncryptionKeys.sha256Hex || fileHash,
+          name: selectedFile ? selectedFile.name : `Token #${mintedTokenId}`,
+        });
+      }
+
+      onToast(
+        mintedTokenId !== null
+          ? `🎉 Token #${mintedTokenId} Minted Successfully!`
+          : "🎉 NFT Minted Successfully!",
+        "success"
+      );
+
       setCid("");
       setDescription("");
       setSelectedFile(null);
+      setFileHash("");
+      setStagedEncryptionKeys(null);
       await fetchTokens();
     } catch (error) {
       console.error(error);
@@ -197,14 +283,34 @@ function OwnerDashboard({ onBack, onToast }) {
     }
   };
 
-  // ---- Generate Access Key ----
+  // ---- Generate Cryptographic Access Key ----
   const handleGenerateKey = async (tokenId) => {
-    const key = generateAccessKey(tokenId);
+    const localKey = getLocalAssetKey(tokenId);
+    const token = tokens.find((t) => t.tokenId === tokenId);
+
+    let key;
+    if (localKey && localKey.keyBase64) {
+      key = generateAccessKey({
+        tokenId,
+        keyBase64: localKey.keyBase64,
+        ivBase64: localKey.ivBase64,
+        sha256Hex: localKey.sha256Hex,
+        name: localKey.name || token?.metadata?.name,
+      });
+      onToast("🔒 Cryptographic Decryption Key copied to clipboard!", "success");
+    } else {
+      key = generateAccessKey({
+        tokenId,
+        sha256Hex: token?.metadata?.sha256 || null,
+        name: token?.metadata?.name || null,
+      });
+      onToast("Access key copied!", "info");
+    }
+
     try {
       await navigator.clipboard.writeText(key);
       setCopiedIndex(tokenId);
-      onToast("Access key copied to clipboard!", "success");
-      setTimeout(() => setCopiedIndex(null), 2000);
+      setTimeout(() => setCopiedIndex(null), 2500);
     } catch {
       const textarea = document.createElement("textarea");
       textarea.value = key;
@@ -213,8 +319,7 @@ function OwnerDashboard({ onBack, onToast }) {
       document.execCommand("copy");
       document.body.removeChild(textarea);
       setCopiedIndex(tokenId);
-      onToast("Access key copied!", "success");
-      setTimeout(() => setCopiedIndex(null), 2000);
+      setTimeout(() => setCopiedIndex(null), 2500);
     }
   };
 
@@ -262,8 +367,8 @@ function OwnerDashboard({ onBack, onToast }) {
             <span className="dashboard__wallet-prompt-icon">🦊</span>
             <h2 className="dashboard__wallet-prompt-title">Connect Your Wallet</h2>
             <p className="dashboard__wallet-prompt-desc">
-              Connect your MetaMask wallet to start minting your creative work as NFTs
-              on the Ethereum blockchain and generating secure access keys.
+              Connect your MetaMask wallet to notarize intellectual property, encrypt confidential assets,
+              and mint verifiable ERC-721 records on the Ethereum blockchain.
             </p>
             <WalletConnect
               account={null}
@@ -318,8 +423,8 @@ function OwnerDashboard({ onBack, onToast }) {
             <div className="stat-card__value stat-card__value--emerald">{activeTokens.length}</div>
           </div>
           <div className="stat-card stat-card--violet">
-            <div className="stat-card__label">Token Standard</div>
-            <div className="stat-card__value stat-card__value--violet" style={{ fontSize: "1.1rem" }}>ERC-721</div>
+            <div className="stat-card__label">Encryption Standard</div>
+            <div className="stat-card__value stat-card__value--violet" style={{ fontSize: "1.05rem" }}>AES-256-GCM</div>
           </div>
           <div className="stat-card stat-card--cyan">
             <div className="stat-card__label">Network</div>
@@ -333,12 +438,12 @@ function OwnerDashboard({ onBack, onToast }) {
           <div className="dashboard__steps">
             <div className={`dashboard__step ${cid || selectedFile ? "dashboard__step--done" : "dashboard__step--active"}`}>
               <div className="dashboard__step-num">{cid || selectedFile ? "✓" : "1"}</div>
-              <span className="dashboard__step-label">Upload File</span>
+              <span className="dashboard__step-label">Select & Hash</span>
             </div>
             <div className="dashboard__step-sep" />
             <div className={`dashboard__step ${cid && !isMinting ? "dashboard__step--active" : cid && isMinting ? "dashboard__step--done" : ""}`}>
               <div className="dashboard__step-num">2</div>
-              <span className="dashboard__step-label">Add Details</span>
+              <span className="dashboard__step-label">Encrypt & Pin</span>
             </div>
             <div className="dashboard__step-sep" />
             <div className={`dashboard__step ${isMinting ? "dashboard__step--active" : ""}`}>
@@ -347,9 +452,10 @@ function OwnerDashboard({ onBack, onToast }) {
             </div>
           </div>
 
-          <h3 className="dashboard__section-title">🎨 Mint New IP NFT</h3>
+          <h3 className="dashboard__section-title">🎨 Notarize & Mint IP NFT</h3>
           <p className="dashboard__section-desc">
-            Upload your creative work to IPFS and mint it as a permanent, transferable ERC-721 NFT on the blockchain.
+            Protect your intellectual property with zero-knowledge SHA-256 fingerprinting,
+            optional client-side AES-256 encryption, and immutable ERC-721 blockchain notarization.
           </p>
 
           {/* Dropzone */}
@@ -358,37 +464,84 @@ function OwnerDashboard({ onBack, onToast }) {
               type="file"
               id="file-upload"
               className="dashboard__file-input"
-              onChange={handleFileUpload}
+              onChange={handleFileChange}
               disabled={isUploading || isMinting}
             />
             <label
               htmlFor="file-upload"
               className={`dashboard__dropzone-label ${isUploading ? "loading" : ""}`}
             >
-              {isUploading ? (
+              {selectedFile ? (
                 <>
-                  <span className="btn-spinner" style={{ width: 28, height: 28, borderWidth: 3 }} />
-                  <span className="upload-text">Uploading to IPFS…</span>
-                </>
-              ) : selectedFile ? (
-                <>
-                  <span className="upload-icon">📎</span>
+                  <span className="upload-icon">📄</span>
                   <span className="file-name">{selectedFile.name}</span>
                   <span className="file-name-size">
-                    {(selectedFile.size / 1024).toFixed(1)} KB · File pinned ✓
+                    {(selectedFile.size / 1024).toFixed(1)} KB · Ready to Encrypt
                   </span>
                 </>
               ) : (
                 <>
                   <span className="upload-icon">📁</span>
-                  <span className="upload-text">Click to Upload or Drag & Drop</span>
-                  <span className="upload-sub">Supports all file types · Pinned via Pinata</span>
+                  <span className="upload-text">Click to Select or Drag & Drop File</span>
+                  <span className="upload-sub">PDFs, Code, Research, Media, Schematics · Hardware-Accelerated Hashing</span>
                 </>
               )}
             </label>
           </div>
 
-          <div className="dashboard__divider">or enter CID manually</div>
+          {/* Real-time Cryptographic Fingerprint Badge */}
+          {fileHash && (
+            <div className="dashboard__crypto-panel">
+              <div className="crypto-badge">
+                <span className="crypto-badge__icon">⚡</span>
+                <span className="crypto-badge__label">SHA-256 Fingerprint:</span>
+                <code className="crypto-badge__hash" title={`0x${fileHash}`}>
+                  0x{fileHash.slice(0, 16)}…{fileHash.slice(-12)}
+                </code>
+              </div>
+
+              {/* Zero-Knowledge Confidentiality Toggle */}
+              <div className="dashboard__security-toggle">
+                <label className="toggle-label">
+                  <input
+                    type="checkbox"
+                    checked={isEncryptedMode}
+                    onChange={(e) => setIsEncryptedMode(e.target.checked)}
+                    disabled={isUploading || isMinting}
+                  />
+                  <span className="toggle-custom" />
+                  <span className="toggle-text">
+                    <strong>Zero-Knowledge AES-256-GCM Encryption</strong>
+                    <small>Encrypt in browser before IPFS (Confidential / Trade Secrets)</small>
+                  </span>
+                </label>
+              </div>
+
+              {/* Upload & Encrypt Action Button */}
+              {!cid && (
+                <button
+                  type="button"
+                  className="dashboard__store-btn"
+                  style={{ width: "100%", justifyContent: "center", marginTop: 12 }}
+                  onClick={handleUploadToIPFS}
+                  disabled={isUploading}
+                >
+                  {isUploading ? (
+                    <>
+                      <span className="btn-spinner" />
+                      {isEncryptedMode ? "Encrypting & Pinning…" : "Pinning to IPFS…"}
+                    </>
+                  ) : (
+                    <>
+                      {isEncryptedMode ? "🔒 Encrypt & Pin to IPFS" : "🌐 Pin Plaintext to IPFS"}
+                    </>
+                  )}
+                </button>
+              )}
+            </div>
+          )}
+
+          <div className="dashboard__divider">or enter existing IPFS CID</div>
 
           <div className="dashboard__upload-row">
             <input
@@ -405,7 +558,7 @@ function OwnerDashboard({ onBack, onToast }) {
           <div className="dashboard__upload-row" style={{ marginTop: 12 }}>
             <textarea
               className="dashboard__input dashboard__textarea"
-              placeholder="Write a brief description about this file…"
+              placeholder="Write a brief legal/technical description of this IP asset…"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               disabled={isMinting || isUploading}
@@ -424,10 +577,10 @@ function OwnerDashboard({ onBack, onToast }) {
               {isMinting ? (
                 <>
                   <span className="btn-spinner" />
-                  Minting…
+                  Minting on Blockchain…
                 </>
               ) : (
-                "🎨 Mint as NFT"
+                "🛡️ Notarize & Mint NFT"
               )}
             </button>
           </div>
@@ -460,8 +613,8 @@ function OwnerDashboard({ onBack, onToast }) {
           {tokens.length === 0 ? (
             <div className="dashboard__empty">
               <span className="dashboard__empty-icon">📦</span>
-              <p className="dashboard__empty-text">No NFTs minted yet</p>
-              <p className="dashboard__empty-sub">Upload a file above and mint your first IP NFT</p>
+              <p className="dashboard__empty-text">No NFTs notarized yet</p>
+              <p className="dashboard__empty-sub">Upload an asset above to create your first cryptographic IP record</p>
             </div>
           ) : displayTokens.length === 0 ? (
             <div className="dashboard__empty">
@@ -475,6 +628,8 @@ function OwnerDashboard({ onBack, onToast }) {
               const name = token.metadata?.name || `Token #${token.tokenId}`;
               const desc = token.metadata?.description || "No description stored";
               const fileCID = token.metadata?.fileCID || token.metadataCID;
+              const sha256 = token.metadata?.sha256;
+              const isEncrypted = token.metadata?.isEncrypted;
               const isCopied = copiedIndex === token.tokenId;
 
               return (
@@ -488,9 +643,30 @@ function OwnerDashboard({ onBack, onToast }) {
                       <div className="record-card__main">
                         <span className="record-card__index">#{token.tokenId}</span>
                         <div className="record-card__info">
-                          <div className="record-card__name">{name}</div>
+                          <div className="record-card__name-row">
+                            <span className="record-card__name">{name}</span>
+                            {isEncrypted ? (
+                              <span className="badge badge--encrypted" title="Encrypted with client-side AES-256-GCM">
+                                🔒 AES-256 Encrypted
+                              </span>
+                            ) : (
+                              <span className="badge badge--public" title="Public IPFS record">
+                                🌐 Public
+                              </span>
+                            )}
+                          </div>
                           <div className="record-card__description">{desc}</div>
-                          <div className="record-card__cid-label">File CID</div>
+
+                          {sha256 && (
+                            <div className="record-card__hash-row">
+                              <span className="hash-label">SHA-256:</span>
+                              <code className="hash-val" title={`0x${sha256}`}>
+                                0x{sha256.slice(0, 10)}…{sha256.slice(-8)}
+                              </code>
+                            </div>
+                          )}
+
+                          <div className="record-card__cid-label">IPFS CID</div>
                           <a
                             className="record-card__cid"
                             href={`https://ipfs.io/ipfs/${fileCID}`}
@@ -538,6 +714,7 @@ function OwnerDashboard({ onBack, onToast }) {
                           className={`record-card__action-btn record-card__action-btn--key ${isCopied ? "record-card__action-btn--key-copied" : ""}`}
                           onClick={() => handleGenerateKey(token.tokenId)}
                           id={`btn-key-${token.tokenId}`}
+                          title="Generate & copy cryptographic access key"
                         >
                           {isCopied ? "✓ Copied!" : "🔑 Key"}
                         </button>

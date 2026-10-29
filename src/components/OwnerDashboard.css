@@ -887,3 +887,157 @@
     display: none;
   }
 }
+
+
+/* ══════════════════════════════════════
+   ZERO-KNOWLEDGE CRYPTO & SECURITY CONTROLS
+══════════════════════════════════════ */
+.dashboard__crypto-panel {
+  margin-top: 16px;
+  padding: 16px;
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  border-radius: var(--radius-lg);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  animation: fadeIn 0.3s ease;
+}
+
+.crypto-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 0.85rem;
+}
+
+.crypto-badge__icon {
+  font-size: 1rem;
+}
+
+.crypto-badge__label {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.crypto-badge__hash {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.1);
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(56, 189, 248, 0.2);
+  font-size: 0.82rem;
+}
+
+.dashboard__security-toggle {
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.toggle-label input {
+  display: none;
+}
+
+.toggle-custom {
+  width: 44px;
+  height: 24px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 999px;
+  position: relative;
+  transition: all 0.25s ease;
+  flex-shrink: 0;
+}
+
+.toggle-custom::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  background: white;
+  border-radius: 50%;
+  transition: transform 0.25s ease;
+}
+
+.toggle-label input:checked + .toggle-custom {
+  background: linear-gradient(135deg, #8b5cf6, #3b82f6);
+}
+
+.toggle-label input:checked + .toggle-custom::after {
+  transform: translateX(20px);
+}
+
+.toggle-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.toggle-text strong {
+  font-size: 0.88rem;
+  color: var(--text-primary);
+}
+
+.toggle-text small {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+/* Card Badges */
+.record-card__name-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.badge {
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 999px;
+  letter-spacing: 0.02em;
+}
+
+.badge--encrypted {
+  background: rgba(139, 92, 246, 0.15);
+  color: #c084fc;
+  border: 1px solid rgba(139, 92, 246, 0.35);
+}
+
+.badge--public {
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.record-card__hash-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+  margin-top: 4px;
+}
+
+.hash-label {
+  color: var(--text-muted);
+}
+
+.hash-val {
+  font-family: monospace;
+  color: #93c5fd;
+  background: rgba(59, 130, 246, 0.1);
+  padding: 2px 6px;
+  border-radius: 4px;
+}

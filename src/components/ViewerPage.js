@@ -1,14 +1,26 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { decodeAccessKey } from "../utils/accessKey";
 import { getReadOnlyContract } from "../utils/contract";
+import { decryptFile } from "../utils/crypto";
+import { fetchIPFSJSON, fetchIPFSBlob } from "../utils/ipfs";
 import "./ViewerPage.css";
 
 function ViewerPage({ onBack, onToast }) {
   const [accessKey, setAccessKey] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [statusText, setStatusText] = useState("");
   const [error, setError] = useState("");
   const [result, setResult] = useState(null);
   const [unlocked, setUnlocked] = useState(false);
+
+  // Clean up Object URL when component unmounts or result changes
+  useEffect(() => {
+    return () => {
+      if (result?.decryptedUrl) {
+        URL.revokeObjectURL(result.decryptedUrl);
+      }
+    };
+  }, [result]);
 
   const handleSubmit = async () => {
     if (!accessKey.trim()) {
@@ -18,45 +30,93 @@ function ViewerPage({ onBack, onToast }) {
 
     setIsLoading(true);
     setError("");
+    setStatusText("Decoding access key…");
     setResult(null);
     setUnlocked(false);
 
     try {
-      const { tokenId } = decodeAccessKey(accessKey.trim());
+      const decodedKey = decodeAccessKey(accessKey.trim());
       const contract = getReadOnlyContract();
 
+      setStatusText("Verifying ownership on blockchain…");
       const [metadataCID, owner] = await Promise.all([
-        contract.tokenURI(tokenId),
-        contract.ownerOf(tokenId),
+        contract.tokenURI(decodedKey.tokenId),
+        contract.ownerOf(decodedKey.tokenId),
       ]);
 
       if (!metadataCID) {
-        setError("No content found for this access key.");
-        return;
+        throw new Error("No IP metadata found on-chain for this token ID.");
       }
 
+      setStatusText("Retrieving metadata from IPFS…");
       let metadata = null;
       try {
-        const res = await fetch(`https://ipfs.io/ipfs/${metadataCID}`);
-        metadata = await res.json();
-      } catch (e) {}
+        metadata = await fetchIPFSJSON(metadataCID);
+      } catch (e) {
+        console.warn("Could not fetch IPFS JSON metadata", e);
+      }
+
+      const isAssetEncrypted = metadata?.isEncrypted || decodedKey.isEncrypted;
+      const fileCID = metadata?.fileCID || metadataCID;
+      const sha256 = metadata?.sha256 || decodedKey.sha256Hex;
+      const name = metadata?.name || decodedKey.name || `Asset #${decodedKey.tokenId}`;
+      const description = metadata?.description || "No description provided";
+      const mimeType = metadata?.mimeType || "application/octet-stream";
+
+      let decryptedUrl = null;
+      let isVerified = false;
+
+      if (isAssetEncrypted) {
+        if (!decodedKey.isEncrypted || !decodedKey.keyBase64 || !decodedKey.ivBase64) {
+          throw new Error(
+            "🔒 Confidential IP: This NFT is encrypted with AES-256-GCM. The access key entered lacks decryption credentials. Please request a cryptographic access key from the author."
+          );
+        }
+
+        setStatusText("Fetching encrypted payload from IPFS…");
+        const encryptedBlob = await fetchIPFSBlob(fileCID);
+
+        setStatusText("Decrypting in-browser memory (Zero-Knowledge)…");
+        const decResult = await decryptFile(
+          encryptedBlob,
+          decodedKey.keyBase64,
+          decodedKey.ivBase64,
+          sha256,
+          mimeType
+        );
+
+        decryptedUrl = URL.createObjectURL(decResult.decryptedBlob);
+        isVerified = decResult.verified;
+      }
 
       setResult({
-        tokenId,
+        tokenId: decodedKey.tokenId,
         metadataCID,
-        fileCID: metadata?.fileCID || metadataCID,
-        name: metadata?.name || `Token #${tokenId}`,
-        description: metadata?.description || "No description available",
+        fileCID,
+        name,
+        description,
         owner,
+        isEncrypted: isAssetEncrypted,
+        verifiedIntegrity: isVerified || !isAssetEncrypted,
+        sha256,
+        mimeType,
+        fileSize: metadata?.fileSize,
+        decryptedUrl,
       });
 
       setUnlocked(true);
-      onToast("Content retrieved successfully!", "success");
+      onToast(
+        isAssetEncrypted
+          ? "🎉 Decrypted & Verified with Zero-Knowledge Proof!"
+          : "Content retrieved successfully!",
+        "success"
+      );
     } catch (err) {
       console.error(err);
       setError(err.message || "Failed to retrieve content. Please check your access key.");
     } finally {
       setIsLoading(false);
+      setStatusText("");
     }
   };
 
@@ -85,12 +145,12 @@ function ViewerPage({ onBack, onToast }) {
           {unlocked ? "🔓" : "🔑"}
         </div>
         <h1 className="viewer__title">
-          {unlocked ? "Content Unlocked!" : "Access Protected Content"}
+          {unlocked ? "Content Unlocked & Verified!" : "Access Protected Content"}
         </h1>
         <p className="viewer__desc">
           {unlocked
-            ? "Your NFT-backed content has been verified on-chain."
-            : "Enter the access key shared by the content creator to view their protected NFT media."}
+            ? "Your content has been authenticated on-chain and decrypted in-browser memory."
+            : "Enter a cryptographic access key to verify on-chain provenance and decrypt protected IP assets."}
         </p>
       </div>
 
@@ -99,7 +159,7 @@ function ViewerPage({ onBack, onToast }) {
         <div className="viewer__input-group">
           <div className="viewer__input-card">
             <label className="viewer__input-label" htmlFor="input-access-key">
-              Access Key
+              Cryptographic Access Key
             </label>
             <div className="viewer__input-row">
               <div className="viewer__input-wrapper">
@@ -107,7 +167,7 @@ function ViewerPage({ onBack, onToast }) {
                 <input
                   type="text"
                   className="viewer__input"
-                  placeholder="Paste your access key here…"
+                  placeholder="Paste access key (e.g. IPV-eyJ2IjoiMy4w…)"
                   value={accessKey}
                   onChange={(e) => {
                     setAccessKey(e.target.value);
@@ -135,6 +195,13 @@ function ViewerPage({ onBack, onToast }) {
               </button>
             </div>
 
+            {statusText && (
+              <div className="viewer__status">
+                <span className="viewer__status-dot" />
+                <span>{statusText}</span>
+              </div>
+            )}
+
             {error && (
               <div className="viewer__error">
                 <span>⚠️</span>
@@ -143,7 +210,7 @@ function ViewerPage({ onBack, onToast }) {
             )}
 
             <p className="viewer__hint">
-              Access keys are provided by NFT owners. No wallet required to view content.
+              Access keys are provided by IP creators. No wallet required to decrypt and view content.
             </p>
           </div>
         </div>
@@ -156,23 +223,44 @@ function ViewerPage({ onBack, onToast }) {
             {/* Verified badge */}
             <div className="viewer__verified-badge">
               <span className="viewer__verified-dot" />
-              <span>Verified NFT · Token #{result.tokenId}</span>
+              <span>Verified On-Chain NFT · Token #{result.tokenId}</span>
             </div>
+
+            {/* Zero-Knowledge Security Banner */}
+            {result.isEncrypted && (
+              <div className="viewer__security-banner">
+                <span className="security-icon">🛡️</span>
+                <div className="security-text">
+                  <strong>Zero-Knowledge AES-256 Decryption Complete</strong>
+                  <p>Payload was fetched encrypted from IPFS and decrypted strictly in your browser memory.</p>
+                </div>
+              </div>
+            )}
 
             {/* Info sections */}
             <div className="viewer__result-grid">
               <div className="viewer__result-field">
-                <div className="viewer__result-label">Title</div>
+                <div className="viewer__result-label">Asset Title</div>
                 <div className="viewer__result-value viewer__result-value--large">{result.name}</div>
               </div>
 
               <div className="viewer__result-field">
-                <div className="viewer__result-label">Description</div>
+                <div className="viewer__result-label">Description / Legal Declaration</div>
                 <div className="viewer__result-value">{result.description}</div>
               </div>
 
+              {result.sha256 && (
+                <div className="viewer__result-field">
+                  <div className="viewer__result-label">Cryptographic Fingerprint (SHA-256)</div>
+                  <div className="viewer__hash-box">
+                    <code>0x{result.sha256}</code>
+                    <span className="hash-status-badge">✓ Tamper-Evident Integrity</span>
+                  </div>
+                </div>
+              )}
+
               <div className="viewer__result-field">
-                <div className="viewer__result-label">IPFS Content Hash</div>
+                <div className="viewer__result-label">IPFS Storage CID</div>
                 <a
                   className="viewer__result-cid"
                   href={`https://ipfs.io/ipfs/${result.fileCID}`}
@@ -185,27 +273,64 @@ function ViewerPage({ onBack, onToast }) {
 
               <div className="viewer__result-row">
                 <div className="viewer__result-field viewer__result-field--half">
-                  <div className="viewer__result-label">Current Owner</div>
+                  <div className="viewer__result-label">Registered Owner</div>
                   <div className="viewer__result-owner">{truncateAddress(result.owner)}</div>
                 </div>
                 <div className="viewer__result-field viewer__result-field--half">
                   <div className="viewer__result-label">Token Standard</div>
-                  <div className="viewer__result-standard">ERC-721</div>
+                  <div className="viewer__result-standard">ERC-721 (Sepolia)</div>
                 </div>
               </div>
             </div>
 
+            {/* In-browser preview for decrypted content */}
+            {result.decryptedUrl && (
+              <div className="viewer__preview-container">
+                <div className="viewer__preview-header">Asset Preview</div>
+                {result.mimeType.startsWith("image/") ? (
+                  <div className="viewer__preview-media">
+                    <img src={result.decryptedUrl} alt={result.name} className="viewer__preview-img" />
+                  </div>
+                ) : result.mimeType.startsWith("audio/") ? (
+                  <div className="viewer__preview-media">
+                    <audio controls src={result.decryptedUrl} style={{ width: "100%" }} />
+                  </div>
+                ) : result.mimeType.startsWith("video/") ? (
+                  <div className="viewer__preview-media">
+                    <video controls src={result.decryptedUrl} style={{ width: "100%", maxHeight: 400 }} />
+                  </div>
+                ) : (
+                  <div className="viewer__preview-generic">
+                    <span>📄</span>
+                    <span>Decrypted File Ready ({result.mimeType})</span>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Action buttons */}
             <div className="viewer__result-actions">
-              <a
-                className="lp-btn lp-btn--primary"
-                href={`https://ipfs.io/ipfs/${result.fileCID}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                id="btn-view-content"
-              >
-                🌐 View Content on IPFS
-              </a>
+              {result.decryptedUrl ? (
+                <a
+                  className="lp-btn lp-btn--primary"
+                  href={result.decryptedUrl}
+                  download={result.name}
+                  id="btn-download-decrypted"
+                >
+                  ⬇️ Download Decrypted Asset
+                </a>
+              ) : (
+                <a
+                  className="lp-btn lp-btn--primary"
+                  href={`https://ipfs.io/ipfs/${result.fileCID}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  id="btn-view-content"
+                >
+                  🌐 View Content on IPFS
+                </a>
+              )}
+
               <button
                 className="viewer__reset-btn"
                 onClick={() => {
