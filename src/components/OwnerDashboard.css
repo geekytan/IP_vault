@@ -1041,3 +1041,16 @@
   padding: 2px 6px;
   border-radius: 4px;
 }
+
+
+.record-card__action-btn--cert {
+  background: rgba(56, 189, 248, 0.1);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.25);
+}
+
+.record-card__action-btn--cert:hover {
+  background: rgba(56, 189, 248, 0.2);
+  border-color: #38bdf8;
+  transform: translateY(-1px);
+}

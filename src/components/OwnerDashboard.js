@@ -5,6 +5,7 @@ import { getContract } from "../utils/contract";
 import { generateAccessKey, saveLocalAssetKey, getLocalAssetKey } from "../utils/accessKey";
 import { computeSHA256, encryptFile } from "../utils/crypto";
 import { fetchIPFSJSON } from "../utils/ipfs";
+import CertificateModal from "./CertificateModal";
 import "./OwnerDashboard.css";
 
 function OwnerDashboard({ onBack, onToast }) {
@@ -21,6 +22,7 @@ function OwnerDashboard({ onBack, onToast }) {
   const [isEncryptedMode, setIsEncryptedMode] = useState(true);
   const [stagedEncryptionKeys, setStagedEncryptionKeys] = useState(null);
   const [copiedIndex, setCopiedIndex] = useState(null);
+  const [selectedCertToken, setSelectedCertToken] = useState(null);
   const [showArchived, setShowArchived] = useState(false);
   const [archivedIds, setArchivedIds] = useState(() => {
     const saved = localStorage.getItem("archived_tokens");
@@ -711,6 +713,13 @@ function OwnerDashboard({ onBack, onToast }) {
                           📤 Transfer
                         </button>
                         <button
+                          className="record-card__action-btn record-card__action-btn--cert"
+                          onClick={() => setSelectedCertToken(token)}
+                          title="View official Notarization Certificate"
+                        >
+                          📜 Certificate
+                        </button>
+                        <button
                           className={`record-card__action-btn record-card__action-btn--key ${isCopied ? "record-card__action-btn--key-copied" : ""}`}
                           onClick={() => handleGenerateKey(token.tokenId)}
                           id={`btn-key-${token.tokenId}`}
@@ -726,6 +735,15 @@ function OwnerDashboard({ onBack, onToast }) {
             })
           )}
         </div>
+
+        {/* Certificate Modal */}
+        {selectedCertToken && (
+          <CertificateModal
+            token={selectedCertToken}
+            ownerAddress={account}
+            onClose={() => setSelectedCertToken(null)}
+          />
+        )}
       </div>
     </div>
   );

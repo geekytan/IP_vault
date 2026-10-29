@@ -3,6 +3,7 @@ import { decodeAccessKey } from "../utils/accessKey";
 import { getReadOnlyContract } from "../utils/contract";
 import { decryptFile } from "../utils/crypto";
 import { fetchIPFSJSON, fetchIPFSBlob } from "../utils/ipfs";
+import CertificateModal from "./CertificateModal";
 import "./ViewerPage.css";
 
 function ViewerPage({ onBack, onToast }) {
@@ -12,6 +13,7 @@ function ViewerPage({ onBack, onToast }) {
   const [error, setError] = useState("");
   const [result, setResult] = useState(null);
   const [unlocked, setUnlocked] = useState(false);
+  const [showCertificate, setShowCertificate] = useState(false);
 
   // Clean up Object URL when component unmounts or result changes
   useEffect(() => {
@@ -332,6 +334,14 @@ function ViewerPage({ onBack, onToast }) {
               )}
 
               <button
+                className="viewer__cert-btn"
+                onClick={() => setShowCertificate(true)}
+                title="View Bernstein-Standard Cryptographic Notarization Certificate"
+              >
+                📜 Proof Certificate
+              </button>
+
+              <button
                 className="viewer__reset-btn"
                 onClick={() => {
                   setResult(null);
@@ -344,6 +354,15 @@ function ViewerPage({ onBack, onToast }) {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Notarization Certificate Modal */}
+      {showCertificate && result && (
+        <CertificateModal
+          token={result}
+          ownerAddress={result.owner}
+          onClose={() => setShowCertificate(false)}
+        />
       )}
     </div>
   );
