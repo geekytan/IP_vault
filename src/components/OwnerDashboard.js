@@ -4,7 +4,7 @@ import WalletConnect from "./WalletConnect";
 import { getContract } from "../utils/contract";
 import { generateAccessKey, saveLocalAssetKey, getLocalAssetKey } from "../utils/accessKey";
 import { computeSHA256, encryptFile } from "../utils/crypto";
-import { fetchIPFSJSON } from "../utils/ipfs";
+import { fetchIPFSJSON, pinFileToPinata, pinJSONToPinata } from "../utils/ipfs";
 import CertificateModal from "./CertificateModal";
 import "./OwnerDashboard.css";
 
@@ -95,32 +95,18 @@ function OwnerDashboard({ onBack, onToast }) {
       }
 
       onToast("Pinning payload to IPFS via Pinata…", "info");
-      const formData = new FormData();
-      formData.append("file", uploadFile);
+      const ipfsHash = await pinFileToPinata(uploadFile, uploadFile.name);
+      setCid(ipfsHash);
 
-      const res = await fetch("https://api.pinata.cloud/pinning/pinFileToIPFS", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${process.env.REACT_APP_PINATA_JWT}`,
-        },
-        body: formData,
-      });
-
-      const resData = await res.json();
-      if (resData.IpfsHash) {
-        setCid(resData.IpfsHash);
-        onToast(
-          isEncryptedMode
-            ? "🛡️ Encrypted ciphertext pinned! Ready to mint."
-            : "File pinned! Ready to mint.",
-          "success"
-        );
-      } else {
-        throw new Error("Upload failed: No IPFS hash returned");
-      }
+      onToast(
+        isEncryptedMode
+          ? "🛡️ Encrypted ciphertext pinned! Ready to mint."
+          : "File pinned! Ready to mint.",
+        "success"
+      );
     } catch (error) {
       console.error("IPFS upload error:", error);
-      onToast("IPFS upload failed. Please verify Pinata credentials.", "error");
+      onToast(error.message || "IPFS upload failed.", "error");
     } finally {
       setIsUploading(false);
     }
@@ -224,17 +210,7 @@ function OwnerDashboard({ onBack, onToast }) {
       };
 
       onToast("Pinning metadata to IPFS…", "info");
-      const res = await fetch("https://api.pinata.cloud/pinning/pinJSONToIPFS", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${process.env.REACT_APP_PINATA_JWT}`,
-        },
-        body: JSON.stringify(metadata),
-      });
-
-      const metaDataJSON = await res.json();
-      const finalHash = metaDataJSON.IpfsHash;
+      const finalHash = await pinJSONToPinata(metadata);
 
       onToast("Minting NFT on blockchain…", "info");
       const tx = await contract.mintIPRecord(finalHash);
@@ -278,8 +254,8 @@ function OwnerDashboard({ onBack, onToast }) {
       setStagedEncryptionKeys(null);
       await fetchTokens();
     } catch (error) {
-      console.error(error);
-      onToast("Minting failed", "error");
+      console.error("Minting error:", error);
+      onToast(error.message || "Minting failed", "error");
     } finally {
       setIsMinting(false);
     }
