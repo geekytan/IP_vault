@@ -46,6 +46,22 @@ export const CONTRACT_ABI = [
     stateMutability: "view",
     type: "function",
   },
+  // totalSupply() → uint256
+  {
+    inputs: [],
+    name: "totalSupply",
+    outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  // tokenByIndex(uint256) → uint256
+  {
+    inputs: [{ internalType: "uint256", name: "index", type: "uint256" }],
+    name: "tokenByIndex",
+    outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
+    stateMutability: "view",
+    type: "function",
+  },
   // transferFrom(address from, address to, uint256 tokenId)
   {
     inputs: [
@@ -82,11 +98,14 @@ export function getContract(signer) {
  * Returns a read-only contract instance using a reliable public Sepolia provider
  */
 export function getReadOnlyContract() {
-  let provider;
-  if (window.ethereum) {
-    provider = new ethers.BrowserProvider(window.ethereum);
-  } else {
-    provider = new ethers.JsonRpcProvider("https://ethereum-sepolia-rpc.publicnode.com");
+  try {
+    const provider = new ethers.JsonRpcProvider("https://ethereum-sepolia-rpc.publicnode.com");
+    return new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider);
+  } catch (err) {
+    if (typeof window !== "undefined" && window.ethereum) {
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      return new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider);
+    }
+    throw err;
   }
-  return new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider);
 }

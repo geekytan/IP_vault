@@ -6,7 +6,7 @@ import { fetchIPFSJSON, fetchIPFSBlob } from "../utils/ipfs";
 import CertificateModal from "./CertificateModal";
 import "./ViewerPage.css";
 
-function ViewerPage({ onBack, onToast }) {
+function ViewerPage({ onBack, onToast, onSelectVerifier }) {
   const [accessKey, setAccessKey] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [statusText, setStatusText] = useState("");
@@ -139,6 +139,16 @@ function ViewerPage({ onBack, onToast }) {
           <span>🛡️</span>
           <span className="viewer__brand-name">IP Vault</span>
         </div>
+        {onSelectVerifier && (
+          <button
+            className="nav-action-btn"
+            onClick={onSelectVerifier}
+            title="Open Public Prior Art Verifier"
+            style={{ marginLeft: "auto" }}
+          >
+            <span>🔍</span> Public Verifier
+          </button>
+        )}
       </div>
 
       {/* Hero */}

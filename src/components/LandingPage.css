@@ -852,3 +852,19 @@
     margin-bottom: 40px;
   }
 }
+
+
+/* ── Emerald Action Button ── */
+.lp-btn--emerald {
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  color: #34d399;
+  box-shadow: 0 4px 15px rgba(16, 185, 129, 0.15);
+}
+
+.lp-btn--emerald:hover {
+  background: rgba(16, 185, 129, 0.22);
+  border-color: #34d399;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 25px rgba(16, 185, 129, 0.3);
+}

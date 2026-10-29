@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from "react";
 import "./LandingPage.css";
 
-function LandingPage({ onSelectCreator, onSelectViewer }) {
+function LandingPage({ onSelectCreator, onSelectViewer, onSelectVerifier }) {
   const heroRef = useRef(null);
 
   // Parallax orbs on mouse move
@@ -88,6 +88,14 @@ function LandingPage({ onSelectCreator, onSelectViewer }) {
             >
               <span className="lp-btn__icon">🔑</span>
               I Have an Access Key
+            </button>
+            <button
+              className="lp-btn lp-btn--emerald"
+              onClick={onSelectVerifier}
+              id="hero-verifier-btn"
+            >
+              <span className="lp-btn__icon">🔍</span>
+              Verify Any Document
             </button>
           </div>
 
@@ -281,6 +289,13 @@ function LandingPage({ onSelectCreator, onSelectViewer }) {
                 id="cta-viewer-btn"
               >
                 <span>🔑</span> Enter Access Key
+              </button>
+              <button
+                className="lp-btn lp-btn--emerald"
+                onClick={onSelectVerifier}
+                id="cta-verifier-btn"
+              >
+                <span>🔍</span> Verify Any File
               </button>
             </div>
           </div>

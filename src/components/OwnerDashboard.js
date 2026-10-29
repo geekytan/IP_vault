@@ -8,7 +8,7 @@ import { fetchIPFSJSON, fetchIPFSBlob, pinFileToPinata, pinJSONToPinata } from "
 import CertificateModal from "./CertificateModal";
 import "./OwnerDashboard.css";
 
-function OwnerDashboard({ onBack, onToast }) {
+function OwnerDashboard({ onBack, onToast, onSelectVerifier }) {
   const [account, setAccount] = useState(null);
   const [contract, setContract] = useState(null);
   const [tokens, setTokens] = useState([]);
@@ -416,6 +416,16 @@ function OwnerDashboard({ onBack, onToast }) {
                 <span className="dashboard__brand-icon">🛡️</span>
                 <span className="dashboard__brand-name">IP Vault</span>
               </div>
+              {onSelectVerifier && (
+                <button
+                  className="nav-action-btn"
+                  onClick={onSelectVerifier}
+                  title="Open Public Prior Art Verifier"
+                  style={{ marginLeft: 12 }}
+                >
+                  <span>🔍</span> Public Verifier
+                </button>
+              )}
             </div>
           </div>
           <div className="dashboard__wallet-prompt">
@@ -458,6 +468,16 @@ function OwnerDashboard({ onBack, onToast }) {
               <span className="dashboard__brand-icon">🛡️</span>
               <span className="dashboard__brand-name">IP Vault</span>
             </div>
+            {onSelectVerifier && (
+              <button
+                className="nav-action-btn"
+                onClick={onSelectVerifier}
+                title="Open Public Prior Art Verifier"
+                style={{ marginLeft: 12 }}
+              >
+                <span>🔍</span> Public Verifier
+              </button>
+            )}
           </div>
           <WalletConnect
             account={account}
