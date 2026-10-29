@@ -1054,3 +1054,16 @@
   border-color: #38bdf8;
   transform: translateY(-1px);
 }
+
+
+.record-card__action-btn--download {
+  background: rgba(16, 185, 129, 0.12);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.record-card__action-btn--download:hover {
+  background: rgba(16, 185, 129, 0.25);
+  border-color: #34d399;
+  transform: translateY(-1px);
+}

@@ -198,7 +198,7 @@ function CertificateModal({ token, ownerAddress, onClose }) {
                 <span className="cert-label">Decentralized Storage Reference (IPFS CID)</span>
                 <a
                   className="cert-link cert-value--mono"
-                  href={`https://ipfs.io/ipfs/${fileCID}`}
+                  href={`https://gateway.pinata.cloud/ipfs/${fileCID}`}
                   target="_blank"
                   rel="noopener noreferrer"
                 >
@@ -255,3 +255,4 @@ function CertificateModal({ token, ownerAddress, onClose }) {
 }
 
 export default CertificateModal;
+

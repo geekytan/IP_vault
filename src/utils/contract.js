@@ -86,7 +86,7 @@ export function getReadOnlyContract() {
   if (window.ethereum) {
     provider = new ethers.BrowserProvider(window.ethereum);
   } else {
-    provider = new ethers.JsonRpcProvider("https://rpc.ankr.com/eth_sepolia");
+    provider = new ethers.JsonRpcProvider("https://ethereum-sepolia-rpc.publicnode.com");
   }
   return new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider);
 }

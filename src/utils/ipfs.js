@@ -1,6 +1,7 @@
 /**
  * High-reliability IPFS fetcher & Pinata uploader
- * Supports multiple fallback IPFS gateways and dual Pinata authentication (JWT & API Keys)
+ * Supports multiple fallback IPFS gateways, local dev proxy to eliminate extension/CORS blockers,
+ * and dual Pinata authentication (JWT & API Keys)
  */
 
 const IPFS_GATEWAYS = [
@@ -114,7 +115,21 @@ function getPinataAuthOptions() {
 }
 
 /**
- * Pins a File/Blob to IPFS using Pinata with automatic auth fallback
+ * Get endpoint candidates (local proxy first to bypass ad-blockers, then direct Pinata API)
+ */
+function getEndpointCandidates(apiPath) {
+  const isBrowser = typeof window !== "undefined";
+  if (isBrowser) {
+    return [
+      `/pinning/${apiPath}`, // Local node proxy on localhost (immune to ad-blockers & CORS)
+      `https://api.pinata.cloud/pinning/${apiPath}`, // Direct fallback
+    ];
+  }
+  return [`https://api.pinata.cloud/pinning/${apiPath}`];
+}
+
+/**
+ * Pins a File/Blob to IPFS using Pinata with automatic proxy & auth fallback
  *
  * @param {File | Blob} file
  * @param {string} [customFilename]
@@ -122,100 +137,100 @@ function getPinataAuthOptions() {
  */
 export async function pinFileToPinata(file, customFilename = null) {
   const authOptions = getPinataAuthOptions();
+  const endpoints = getEndpointCandidates("pinFileToIPFS");
   let lastError = null;
 
-  for (const option of authOptions) {
-    try {
-      const formData = new FormData();
-      if (customFilename) {
-        formData.append("file", file, customFilename);
-      } else {
-        formData.append("file", file);
-      }
-
-      const res = await fetch("https://api.pinata.cloud/pinning/pinFileToIPFS", {
-        method: "POST",
-        headers: {
-          ...option.headers,
-        },
-        body: formData,
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        if (data.IpfsHash) {
-          return data.IpfsHash;
-        }
-      }
-
-      const errText = await res.text();
-      let parsedErr = errText;
+  for (const endpoint of endpoints) {
+    for (const option of authOptions) {
       try {
-        const json = JSON.parse(errText);
-        parsedErr = json.error?.details || json.error?.reason || json.message || errText;
-      } catch (e) {}
+        const formData = new FormData();
+        if (customFilename) {
+          formData.append("file", file, customFilename);
+        } else {
+          formData.append("file", file);
+        }
 
-      lastError = new Error(`Pinata error (${res.status}): ${parsedErr}`);
-    } catch (err) {
-      if (err.name === "TypeError" && err.message.toLowerCase().includes("fetch")) {
-        lastError = new Error(
-          "Network request to api.pinata.cloud failed or was blocked by an extension (e.g. Brave Shields or Ad-Blocker)."
-        );
-      } else {
+        const res = await fetch(endpoint, {
+          method: "POST",
+          headers: {
+            ...option.headers,
+          },
+          body: formData,
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          if (data.IpfsHash) {
+            return data.IpfsHash;
+          }
+        }
+
+        const errText = await res.text();
+        let parsedErr = errText;
+        try {
+          const json = JSON.parse(errText);
+          parsedErr = json.error?.details || json.error?.reason || json.message || errText;
+        } catch (e) {}
+
+        lastError = new Error(`Pinata error (${res.status}): ${parsedErr}`);
+      } catch (err) {
         lastError = err;
       }
     }
   }
 
-  throw lastError || new Error("Failed to pin file to IPFS via Pinata.");
+  throw (
+    lastError ||
+    new Error("Failed to pin file to IPFS via Pinata. Please verify Pinata credentials.")
+  );
 }
 
 /**
- * Pins JSON metadata to IPFS using Pinata with automatic auth fallback
+ * Pins JSON metadata to IPFS using Pinata with automatic proxy & auth fallback
  *
  * @param {Object} metadata
  * @returns {Promise<string>} The IPFS CID (IpfsHash)
  */
 export async function pinJSONToPinata(metadata) {
   const authOptions = getPinataAuthOptions();
+  const endpoints = getEndpointCandidates("pinJSONToIPFS");
   let lastError = null;
 
-  for (const option of authOptions) {
-    try {
-      const res = await fetch("https://api.pinata.cloud/pinning/pinJSONToIPFS", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...option.headers,
-        },
-        body: JSON.stringify(metadata),
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        if (data.IpfsHash) {
-          return data.IpfsHash;
-        }
-      }
-
-      const errText = await res.text();
-      let parsedErr = errText;
+  for (const endpoint of endpoints) {
+    for (const option of authOptions) {
       try {
-        const json = JSON.parse(errText);
-        parsedErr = json.error?.details || json.error?.reason || json.message || errText;
-      } catch (e) {}
+        const res = await fetch(endpoint, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...option.headers,
+          },
+          body: JSON.stringify(metadata),
+        });
 
-      lastError = new Error(`Pinata error (${res.status}): ${parsedErr}`);
-    } catch (err) {
-      if (err.name === "TypeError" && err.message.toLowerCase().includes("fetch")) {
-        lastError = new Error(
-          "Network request to api.pinata.cloud failed or was blocked by an extension (e.g. Brave Shields or Ad-Blocker)."
-        );
-      } else {
+        if (res.ok) {
+          const data = await res.json();
+          if (data.IpfsHash) {
+            return data.IpfsHash;
+          }
+        }
+
+        const errText = await res.text();
+        let parsedErr = errText;
+        try {
+          const json = JSON.parse(errText);
+          parsedErr = json.error?.details || json.error?.reason || json.message || errText;
+        } catch (e) {}
+
+        lastError = new Error(`Pinata error (${res.status}): ${parsedErr}`);
+      } catch (err) {
         lastError = err;
       }
     }
   }
 
-  throw lastError || new Error("Failed to pin JSON to IPFS via Pinata.");
+  throw (
+    lastError ||
+    new Error("Failed to pin JSON metadata to IPFS via Pinata.")
+  );
 }

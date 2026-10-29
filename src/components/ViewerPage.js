@@ -265,7 +265,7 @@ function ViewerPage({ onBack, onToast }) {
                 <div className="viewer__result-label">IPFS Storage CID</div>
                 <a
                   className="viewer__result-cid"
-                  href={`https://ipfs.io/ipfs/${result.fileCID}`}
+                  href={`https://gateway.pinata.cloud/ipfs/${result.fileCID}`}
                   target="_blank"
                   rel="noopener noreferrer"
                 >
@@ -324,7 +324,7 @@ function ViewerPage({ onBack, onToast }) {
               ) : (
                 <a
                   className="lp-btn lp-btn--primary"
-                  href={`https://ipfs.io/ipfs/${result.fileCID}`}
+                  href={`https://gateway.pinata.cloud/ipfs/${result.fileCID}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   id="btn-view-content"

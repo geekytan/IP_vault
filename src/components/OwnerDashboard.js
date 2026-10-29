@@ -4,7 +4,7 @@ import WalletConnect from "./WalletConnect";
 import { getContract } from "../utils/contract";
 import { generateAccessKey, saveLocalAssetKey, getLocalAssetKey } from "../utils/accessKey";
 import { computeSHA256, encryptFile } from "../utils/crypto";
-import { fetchIPFSJSON, pinFileToPinata, pinJSONToPinata } from "../utils/ipfs";
+import { fetchIPFSJSON, fetchIPFSBlob, pinFileToPinata, pinJSONToPinata } from "../utils/ipfs";
 import CertificateModal from "./CertificateModal";
 import "./OwnerDashboard.css";
 
@@ -151,6 +151,59 @@ function OwnerDashboard({ onBack, onToast }) {
     setTokens([]);
     onToast("Wallet disconnected", "info");
   };
+
+  // ---- Explicitly Prompt & Switch Account (Account 1 / Account 2) ----
+  const switchAccount = async () => {
+    if (!window.ethereum) return;
+    try {
+      await window.ethereum.request({
+        method: "wallet_requestPermissions",
+        params: [{ eth_accounts: {} }],
+      });
+      await connectWallet();
+    } catch (e) {
+      console.warn("Account switch cancelled or failed", e);
+    }
+  };
+
+  // ---- Real-time Account & Chain Synchronization ----
+  useEffect(() => {
+    if (!window.ethereum) return;
+
+    const handleAccountsChanged = async (accounts) => {
+      if (!accounts || accounts.length === 0) {
+        setAccount(null);
+        setContract(null);
+        setTokens([]);
+        onToast("Wallet disconnected", "info");
+      } else {
+        const newAccount = accounts[0];
+        setAccount(newAccount);
+        try {
+          const provider = new ethers.BrowserProvider(window.ethereum);
+          const signer = await provider.getSigner();
+          setContract(getContract(signer));
+          onToast(`Active account: ${newAccount.slice(0, 6)}···${newAccount.slice(-4)}`, "info");
+        } catch (e) {
+          console.error("Error updating signer on account change:", e);
+        }
+      }
+    };
+
+    const handleChainChanged = () => {
+      window.location.reload();
+    };
+
+    window.ethereum.on("accountsChanged", handleAccountsChanged);
+    window.ethereum.on("chainChanged", handleChainChanged);
+
+    return () => {
+      if (window.ethereum.removeListener) {
+        window.ethereum.removeListener("accountsChanged", handleAccountsChanged);
+        window.ethereum.removeListener("chainChanged", handleChainChanged);
+      }
+    };
+  }, [onToast]);
 
   // ---- Fetch Tokens ----
   const fetchTokens = useCallback(async () => {
@@ -301,6 +354,30 @@ function OwnerDashboard({ onBack, onToast }) {
     }
   };
 
+  // ---- Safe In-Browser Download (Bypasses Windows Defender Gateway Filter) ----
+  const handleDownloadAsset = async (token) => {
+    const fileCID = token.metadata?.fileCID || token.metadataCID;
+    const name = token.metadata?.name || `asset_${token.tokenId}`;
+    onToast("Fetching file safely from IPFS…", "info");
+
+    try {
+      const blob = await fetchIPFSBlob(fileCID);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      onToast("Download complete!", "success");
+    } catch (e) {
+      console.error(e);
+      onToast("Failed to fetch file from IPFS. Retrying via gateway…", "error");
+      window.open(`https://gateway.pinata.cloud/ipfs/${fileCID}`, "_blank");
+    }
+  };
+
   // ---- Transfer NFT ----
   const handleTransfer = async (tokenId) => {
     const toAddress = prompt("Enter the wallet address to transfer this NFT to:");
@@ -387,6 +464,7 @@ function OwnerDashboard({ onBack, onToast }) {
             isLoading={isConnecting}
             onConnect={connectWallet}
             onDisconnect={disconnectWallet}
+            onSwitchAccount={switchAccount}
           />
         </div>
 
@@ -647,7 +725,7 @@ function OwnerDashboard({ onBack, onToast }) {
                           <div className="record-card__cid-label">IPFS CID</div>
                           <a
                             className="record-card__cid"
-                            href={`https://ipfs.io/ipfs/${fileCID}`}
+                            href={`https://gateway.pinata.cloud/ipfs/${fileCID}`}
                             target="_blank"
                             rel="noopener noreferrer"
                           >
@@ -673,9 +751,16 @@ function OwnerDashboard({ onBack, onToast }) {
                         🏷️ ERC-721 · Token #{token.tokenId}
                       </div>
                       <div className="record-card__actions">
+                        <button
+                          className="record-card__action-btn record-card__action-btn--download"
+                          onClick={() => handleDownloadAsset(token)}
+                          title="Safe in-memory download (bypasses gateway blocker)"
+                        >
+                          ⬇️ Download
+                        </button>
                         <a
                           className="record-card__action-btn record-card__action-btn--ipfs"
-                          href={`https://ipfs.io/ipfs/${fileCID}`}
+                          href={`https://gateway.pinata.cloud/ipfs/${fileCID}`}
                           target="_blank"
                           rel="noopener noreferrer"
                         >

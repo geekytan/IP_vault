@@ -1,7 +1,7 @@
 import React from "react";
 import "./WalletConnect.css";
 
-function WalletConnect({ account, isLoading, onConnect, onDisconnect }) {
+function WalletConnect({ account, isLoading, onConnect, onDisconnect, onSwitchAccount }) {
   const truncate = (addr) => `${addr.slice(0, 6)}···${addr.slice(-4)}`;
 
   if (account) {
@@ -9,6 +9,15 @@ function WalletConnect({ account, isLoading, onConnect, onDisconnect }) {
       <div className="wc wc--connected">
         <div className="wc__status-dot" />
         <span className="wc__address">{truncate(account)}</span>
+        {onSwitchAccount && (
+          <button
+            className="wc__switch-btn"
+            onClick={onSwitchAccount}
+            title="Switch MetaMask account (Account 1 / Account 2)"
+          >
+            🔄 Switch
+          </button>
+        )}
         <button
           className="wc__disconnect-btn"
           onClick={onDisconnect}
